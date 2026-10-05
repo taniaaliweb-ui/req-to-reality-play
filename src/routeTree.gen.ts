@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuditsRouteImport } from './routes/audits'
+import { Route as DataRouteImport } from './routes/data'
 import { Route as DnaRouteImport } from './routes/dna'
 import { Route as EconomicsRouteImport } from './routes/economics'
 import { Route as FactsRouteImport } from './routes/facts'
@@ -34,6 +35,11 @@ const IndexRoute = IndexRouteImport.update({
 const AuditsRoute = AuditsRouteImport.update({
   id: '/audits',
   path: '/audits',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DataRoute = DataRouteImport.update({
+  id: '/data',
+  path: '/data',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DnaRoute = DnaRouteImport.update({
@@ -110,6 +116,7 @@ const EpisodesNewRoute = EpisodesNewRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/audits': typeof AuditsRoute
+  '/data': typeof DataRoute
   '/dna': typeof DnaRoute
   '/economics': typeof EconomicsRoute
   '/facts': typeof FactsRoute
@@ -128,6 +135,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/audits': typeof AuditsRoute
+  '/data': typeof DataRoute
   '/dna': typeof DnaRoute
   '/economics': typeof EconomicsRoute
   '/facts': typeof FactsRoute
@@ -147,6 +155,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/audits': typeof AuditsRoute
+  '/data': typeof DataRoute
   '/dna': typeof DnaRoute
   '/economics': typeof EconomicsRoute
   '/facts': typeof FactsRoute
@@ -167,6 +176,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/audits'
+    | '/data'
     | '/dna'
     | '/economics'
     | '/facts'
@@ -185,6 +195,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/audits'
+    | '/data'
     | '/dna'
     | '/economics'
     | '/facts'
@@ -203,6 +214,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/audits'
+    | '/data'
     | '/dna'
     | '/economics'
     | '/facts'
@@ -222,6 +234,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuditsRoute: typeof AuditsRoute
+  DataRoute: typeof DataRoute
   DnaRoute: typeof DnaRoute
   EconomicsRoute: typeof EconomicsRoute
   FactsRoute: typeof FactsRoute
@@ -252,6 +265,13 @@ declare module '@tanstack/react-router' {
       path: '/audits'
       fullPath: '/audits'
       preLoaderRoute: typeof AuditsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/data': {
+      id: '/data'
+      path: '/data'
+      fullPath: '/data'
+      preLoaderRoute: typeof DataRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dna': {
@@ -358,6 +378,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuditsRoute: AuditsRoute,
+  DataRoute: DataRoute,
   DnaRoute: DnaRoute,
   EconomicsRoute: EconomicsRoute,
   FactsRoute: FactsRoute,

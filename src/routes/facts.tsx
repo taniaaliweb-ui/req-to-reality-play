@@ -6,6 +6,7 @@ import { ConfidenceChip, EmptyEpisode, FactTypeChip, Field, MockBanner, PageHead
 import { RESEARCH_TEMPLATE } from "@/features/episodes/scaffold";
 import type { Fact, FactStatus, FactType, Level, ResearchCategory } from "@/types/lifespan";
 import { newId } from "@/services/lifespanApi";
+import { LineagePanel } from "@/components/lifespan/Lineage";
 import { cn } from "@/lib/utils";
 import { pageHead } from "@/lib/seo";
 
@@ -18,7 +19,7 @@ const TYPES: FactType[] = ["FACT", "ESTIMATE", "ASSUMPTION", "DERIVED"];
 const CATS = Object.keys(RESEARCH_TEMPLATE) as ResearchCategory[];
 
 function Facts() {
-  const { active, db, mutate } = useLifespan();
+  const { active, db, mutate, mode } = useLifespan();
   const { facts } = useActiveRecords();
   const [q, setQ] = useState({ country: "", year: "", category: "", confidence: "", type: "", unresolved: false });
   const [edit, setEdit] = useState<Fact | null>(null);
@@ -66,13 +67,13 @@ function Facts() {
               {rows.map((f) => (
                 <tr key={f.id} onClick={() => setEdit(f)} className={cn("cursor-pointer", f.factType === "ASSUMPTION" && "hatch-assumption")}>
                   <td className="data text-xs">{f.id}</td>
-                  <td><FactTypeChip t={f.factType} /></td>
+                  <td><FactTypeChip t={f.factType} />{f.isPrototype && <div className="mt-0.5 font-mono text-[9px] uppercase tracking-wider text-mock">Prototype</div>}</td>
                   <td className="text-xs text-muted-foreground">{f.category}</td>
                   <td>{f.metric}{f.derivedFrom && <div className="text-[11px] text-derived">↳ {f.derivedFrom}</div>}</td>
                   <td className="data text-right">{f.value} <span className="text-muted-foreground text-[11px]">{f.unit}</span></td>
                   <td className="text-xs">{f.country}<div className="text-muted-foreground">{f.region}</div></td>
                   <td className="data text-xs">{f.yearStart === f.yearEnd ? f.yearStart : `${f.yearStart}–${f.yearEnd}`}</td>
-                  <td className="data text-xs">{f.sourceId ?? <span className="text-fail">none</span>}</td>
+                  <td className="data text-xs">{f.provider ? <span className="text-pass">{f.provider === "world-bank" ? "World Bank" : f.provider}<div className="text-muted-foreground">{f.indicatorCode}</div></span> : f.factType === "DERIVED" && f.derivedFrom?.includes("CALC-") ? <span className="text-derived">calculation</span> : f.sourceId ?? <span className="text-fail">none</span>}</td>
                   <td><ConfidenceChip c={f.confidence} /></td>
                   <td className="text-xs">{f.status}</td>
                 </tr>
@@ -105,6 +106,10 @@ function Facts() {
                 <Field label="Status"><select className="input" value={edit.status} onChange={(e) => setEdit({ ...edit, status: e.target.value as FactStatus })}>{["verified", "unverified", "unresolved", "disputed"].map((t) => <option key={t}>{t}</option>)}</select></Field>
               </div>
               <Field label="Notes"><textarea className="input" rows={3} value={edit.notes} onChange={(e) => setEdit({ ...edit, notes: e.target.value })} /></Field>
+              {edit.isPrototype && <div className="rounded-sm border border-mock/40 bg-mock-soft p-2 text-xs text-mock">PROTOTYPE value from the demo. Not verified history, whatever its status says.</div>}
+              {mode === "backend" && edit.id && (edit.externalObservationId || edit.factType === "DERIVED") && (
+                <div className="border-t border-border pt-3"><div className="eyebrow mb-2">Provenance</div><LineagePanel factId={edit.id} version={edit.updatedAt} /></div>
+              )}
               <div className="flex gap-2"><button className="btn-primary flex-1 justify-center" onClick={save}>Save</button>{edit.id && <button className="btn" onClick={del}>Delete</button>}</div>
             </div>
           </aside>
