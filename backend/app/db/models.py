@@ -250,36 +250,223 @@ class CalculationInput(Base):
     role: Mapped[str] = mapped_column(String(40), primary_key=True)
 
 
-class WageObservation(Base):
-    """Structure for future wage datasets. Nothing writes here in Phase 3 (no wage provider exists)."""
-    __tablename__ = "wage_observations"
-    id: Mapped[str] = mapped_column(String(160), primary_key=True)
-    provider: Mapped[str] = mapped_column(String(40))
-    dataset: Mapped[str] = mapped_column(String(200))
-    country_code: Mapped[str] = mapped_column(String(8))
-    region: Mapped[str] = mapped_column(String(200), default="")
-    year: Mapped[int] = mapped_column(Integer)
-    occupation: Mapped[str] = mapped_column(String(200), default="")
-    industry: Mapped[str] = mapped_column(String(200), default="")
-    experience_level: Mapped[str] = mapped_column(String(80), default="")
-    education: Mapped[str] = mapped_column(String(120), default="")
-    gender: Mapped[str] = mapped_column(String(40), default="")
-    sector: Mapped[str] = mapped_column(String(40), default="")  # formal | informal | all
-    period: Mapped[str] = mapped_column(String(20))  # monthly | annual | hourly
-    basis: Mapped[str] = mapped_column(String(10))  # gross | net
-    statistic: Mapped[str] = mapped_column(String(10))  # mean | median
-    value: Mapped[str] = mapped_column(String(60))
-    currency: Mapped[str] = mapped_column(String(8))
-    source_population: Mapped[str] = mapped_column(Text, default="")
-    source_id: Mapped[str | None] = mapped_column(ForeignKey("sources.id", ondelete="SET NULL"), nullable=True)
-    retrieved_at: Mapped[str] = mapped_column(String(40))
-
-
 class EpisodeDatasetSnapshot(Base):
-    """Pins the exact observation values an episode relied on at a point in time."""
+    """Immutable (once final) record of exactly what evidence an episode relied on."""
     __tablename__ = "episode_dataset_snapshots"
     id: Mapped[str] = mapped_column(String(80), primary_key=True)
     episode_id: Mapped[str] = mapped_column(EP_FK(), index=True)
-    label: Mapped[str] = mapped_column(String(200))
+    label: Mapped[str] = mapped_column(String(200))  # snapshot name, e.g. "Delhi-Dubai Baseline v1"
     created_at: Mapped[str] = mapped_column(String(40))
-    items: Mapped[list] = mapped_column(JSON)  # [{observationId, value, retrievedAt, providerLastUpdated}]
+    items: Mapped[list] = mapped_column(JSON)  # Phase 3 legacy observation pins
+    status: Mapped[str] = mapped_column(String(10), default="draft")  # draft | final
+    notes: Mapped[str] = mapped_column(Text, default="")
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    parent_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    finalized_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+SNAP_FK = lambda: ForeignKey("episode_dataset_snapshots.id", ondelete="CASCADE")  # noqa: E731
+
+
+class SnapshotFact(Base):
+    __tablename__ = "snapshot_facts"
+    snapshot_id: Mapped[str] = mapped_column(SNAP_FK(), primary_key=True)
+    fact_id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    fact_updated_at: Mapped[str] = mapped_column(String(40))  # version reference
+    payload: Mapped[dict] = mapped_column(JSON)  # frozen copy of the fact
+
+
+class SnapshotObservation(Base):
+    __tablename__ = "snapshot_observations"
+    snapshot_id: Mapped[str] = mapped_column(SNAP_FK(), primary_key=True)
+    external_observation_id: Mapped[str] = mapped_column(String(160), primary_key=True)
+    value: Mapped[str] = mapped_column(String(60))
+    retrieved_at: Mapped[str] = mapped_column(String(40))
+    payload: Mapped[dict] = mapped_column(JSON)
+
+
+class SnapshotBaseline(Base):
+    __tablename__ = "snapshot_baselines"
+    snapshot_id: Mapped[str] = mapped_column(SNAP_FK(), primary_key=True)
+    economic_baseline_id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    payload: Mapped[dict] = mapped_column(JSON)
+
+
+# ---------------- Phase 4: labour evidence ----------------
+
+class WageObservation(Base):
+    """Normalised wage statistic. NULL = the source does not provide that dimension (never invented)."""
+    __tablename__ = "wage_observations"
+    id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    external_observation_id: Mapped[str] = mapped_column(ForeignKey("external_observations.id", ondelete="CASCADE"), index=True)
+    provider: Mapped[str] = mapped_column(String(40), index=True)
+    country: Mapped[str] = mapped_column(String(8), index=True)
+    region: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    year: Mapped[int] = mapped_column(Integer, index=True)
+    period: Mapped[str] = mapped_column(String(20))
+    frequency: Mapped[str] = mapped_column(String(10))
+    statistic_type: Mapped[str] = mapped_column(String(14))  # MEAN | MEDIAN | DISTRIBUTION | OTHER
+    pay_period: Mapped[str] = mapped_column(String(10))  # HOURLY | DAILY | WEEKLY | MONTHLY | ANNUAL
+    value: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    nominal_or_real: Mapped[str] = mapped_column(String(80), default="UNKNOWN")
+    gross_or_net: Mapped[str] = mapped_column(String(10), default="UNKNOWN")
+    employee_scope: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    occupation_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    occupation_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    occupation_classification: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    industry_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    industry_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    industry_classification: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    education_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    education_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    education_classification: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    sex: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    age_group: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    rural_urban: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    citizenship: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    migrant_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    formal_informal: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    employment_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    full_part_time: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    source_population: Mapped[str] = mapped_column(Text, default="")
+    survey_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    confidence: Mapped[str] = mapped_column(String(10), default="high")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[str] = mapped_column(String(40))
+    updated_at: Mapped[str] = mapped_column(String(40))
+
+
+class WageDistribution(Base):
+    __tablename__ = "wage_distributions"
+    id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(40))
+    dataset: Mapped[str] = mapped_column(String(200))
+    country: Mapped[str] = mapped_column(String(8), index=True)
+    year: Mapped[int] = mapped_column(Integer)
+    metric: Mapped[str] = mapped_column(Text)
+    pay_period: Mapped[str] = mapped_column(String(10))
+    currency: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    dimensions: Mapped[dict] = mapped_column(JSON, default=dict)  # sex, citizenship, ... as published
+    source_organization: Mapped[str] = mapped_column(Text, default="")
+    source_url: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class WageDistributionBin(Base):
+    __tablename__ = "wage_distribution_bins"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    distribution_id: Mapped[str] = mapped_column(ForeignKey("wage_distributions.id", ondelete="CASCADE"), index=True)
+    lower_bound: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    upper_bound: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    open_lower: Mapped[bool] = mapped_column(Boolean, default=False)
+    open_upper: Mapped[bool] = mapped_column(Boolean, default=False)
+    count: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    share: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    unit: Mapped[str] = mapped_column(String(60), default="")
+    currency: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    external_observation_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+
+class CharacterEconomicProfile(Base):
+    """What evidence to search for at one life stage. Not a wage claim."""
+    __tablename__ = "character_economic_profiles"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    episode_id: Mapped[str] = mapped_column(EP_FK(), index=True)
+    life_stage: Mapped[str] = mapped_column(String(40))
+    target_year: Mapped[int] = mapped_column(Integer)
+    year_start: Mapped[int] = mapped_column(Integer)
+    year_end: Mapped[int] = mapped_column(Integer)
+    fields: Mapped[dict] = mapped_column(JSON)  # country, region, urbanRural, educationLevel, occupation, occupationCode, ...
+    created_at: Mapped[str] = mapped_column(String(40))
+    updated_at: Mapped[str] = mapped_column(String(40))
+
+
+class CandidateReview(Base):
+    __tablename__ = "candidate_reviews"
+    profile_id: Mapped[str] = mapped_column(ForeignKey("character_economic_profiles.id", ondelete="CASCADE"), primary_key=True)
+    wage_observation_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    decision: Mapped[str] = mapped_column(String(12))  # rejected | flagged
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class EconomicBaseline(Base):
+    __tablename__ = "economic_baselines"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    episode_id: Mapped[str] = mapped_column(EP_FK(), index=True)
+    profile_id: Mapped[str | None] = mapped_column(ForeignKey("character_economic_profiles.id", ondelete="SET NULL"), nullable=True)
+    life_stage: Mapped[str] = mapped_column(String(40))
+    year_start: Mapped[int] = mapped_column(Integer)
+    year_end: Mapped[int] = mapped_column(Integer)
+    employment_type: Mapped[str] = mapped_column(String(40), default="")
+    occupation: Mapped[str] = mapped_column(String(200), default="")
+    baseline_type: Mapped[str] = mapped_column(String(16))  # FACT_SUPPORTED | ASSUMPTION | DERIVED
+    estimate_kind: Mapped[str] = mapped_column(String(12))  # POINT | RANGE | DISTRIBUTION
+    low: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    high: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    point: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    currency: Mapped[str] = mapped_column(String(8))
+    pay_period: Mapped[str] = mapped_column(String(10))
+    gross_or_net: Mapped[str] = mapped_column(String(10), default="UNKNOWN")
+    annualization: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    confidence: Mapped[str] = mapped_column(String(20))  # HIGH | MEDIUM | LOW | INSUFFICIENT_DATA
+    confidence_reasons: Mapped[list] = mapped_column(JSON, default=list)
+    reasoning: Mapped[str] = mapped_column(Text, default="")
+    evidence: Mapped[list] = mapped_column(JSON, default=list)  # [{wageObservationId, observationId, factId, score, yearDistance}]
+    source_fact_ids: Mapped[list] = mapped_column(JSON, default=list)
+    derived_calculation_ids: Mapped[list] = mapped_column(JSON, default=list)
+    assumption_fact_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    user_approved: Mapped[bool] = mapped_column(Boolean, default=False)
+    approved_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    created_at: Mapped[str] = mapped_column(String(40))
+    updated_at: Mapped[str] = mapped_column(String(40))
+
+
+class EvidenceGap(Base):
+    __tablename__ = "evidence_gaps"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    episode_id: Mapped[str] = mapped_column(EP_FK(), index=True)
+    gap_key: Mapped[str] = mapped_column(String(200), index=True)
+    title: Mapped[str] = mapped_column(Text)
+    reason: Mapped[str] = mapped_column(Text, default="")
+    category: Mapped[str] = mapped_column(String(40))
+    country: Mapped[str] = mapped_column(String(120), default="")
+    year_start: Mapped[int] = mapped_column(Integer)
+    year_end: Mapped[int] = mapped_column(Integer)
+    priority: Mapped[str] = mapped_column(String(8))  # HIGH | MEDIUM | LOW
+    status: Mapped[str] = mapped_column(String(10), default="open")
+    auto: Mapped[bool] = mapped_column(Boolean, default=True)
+    research_task_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class HouseholdUnit(Base):
+    __tablename__ = "household_units"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    episode_id: Mapped[str] = mapped_column(EP_FK(), index=True)
+    label: Mapped[str] = mapped_column(String(200))
+    year_start: Mapped[int] = mapped_column(Integer)
+    year_end: Mapped[int] = mapped_column(Integer)
+    members: Mapped[list] = mapped_column(JSON, default=list)  # [{id, role, name, employmentKind}]
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class IncomeStream(Base):
+    __tablename__ = "income_streams"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    household_id: Mapped[str] = mapped_column(ForeignKey("household_units.id", ondelete="CASCADE"), index=True)
+    member_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    kind: Mapped[str] = mapped_column(String(30))
+    year_start: Mapped[int] = mapped_column(Integer)
+    year_end: Mapped[int] = mapped_column(Integer)
+    low: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    high: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    pay_period: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    basis: Mapped[str] = mapped_column(String(16))  # FACT_SUPPORTED | ASSUMPTION | DERIVED | UNKNOWN
+    baseline_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    fact_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[str] = mapped_column(String(40))

@@ -34,7 +34,7 @@ def store_observations(db: Session, observations: list[Observation]) -> dict:
     ts = now_iso()
     created = unchanged = revised = 0
     for o in observations:
-        oid = obs_id(o.provider, o.indicator_code, o.country_code, o.year)
+        oid = o.obs_key or obs_id(o.provider, o.indicator_code, o.country_code, o.year)
         row = db.get(m.ExternalObservation, oid)
         val = str(o.value)
         if row is None:
