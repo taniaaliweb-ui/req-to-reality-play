@@ -34,7 +34,7 @@ def test_full_lineage_survives_restart(wb_server):
     assert s["status"] == "partial"
 
     r = c.post("/economics/inflation-adjust", json={"episodeId": EP, "country": "IND", "amount": "100000", "sourceYear": 1995, "targetYear": 2010, "save": True}).json()
-    assert r["status"] == "OK" and r["display"] == "264934.05"
+    assert r["status"] == "OK" and r["display"] == "264934.26"
     der = r["factId"]
 
     fx = c.post("/economics/currency-convert", json={"episodeId": EP, "amount": "500000", "year": 1998, "fromCountry": "IND", "toCountry": "ARE", "save": True}).json()

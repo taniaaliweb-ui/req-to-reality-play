@@ -19,8 +19,8 @@ def test_inflation_reverse_period():
 def test_inflation_decimal_precision():
     # Real World Bank values: India CPI 1995 = 37.7452131691141, 2010 = 100
     r = eng.adjust_for_inflation("100000", 1995, 2010, "37.7452131691141", "100", country="IND", currency="INR")
-    assert r.result.startswith("264934.0")  # 100000*100/37.7452131691141
-    assert r.display == "264934.05"
+    assert r.result.startswith("264934.256833995")  # 100000*100/37.7452131691141
+    assert r.display == "264934.26"
     # Full precision kept, not rounded
     assert len(r.result.replace(".", "")) > 15
 
