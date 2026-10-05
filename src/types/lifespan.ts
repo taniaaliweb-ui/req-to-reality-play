@@ -159,6 +159,14 @@ export interface Fact extends BaseRecord {
   derivedFrom?: string;
   notes: string;
   status: FactStatus;
+  // Phase 3 provenance (optional: Phase 1/2 records don't have them)
+  currency?: string | null;
+  externalObservationId?: string | null;
+  provider?: string | null;
+  dataset?: string | null;
+  indicatorCode?: string | null;
+  /** true = demo/mock value, never verified history */
+  isPrototype?: boolean;
 }
 
 export type LifeEventCategory =
@@ -349,4 +357,89 @@ export interface AppSettings {
   showMockBanners: boolean;
   defaultRealism: number;
   currencyDisplay: "local" | "USD";
+  externalDataEnabled?: boolean;
+  worldBankEnabled?: boolean;
+}
+
+// ---------- Phase 3: truth + economic engine (backend-only data) ----------
+export interface ExternalObservation {
+  id: string;
+  provider: string;
+  dataset: string;
+  indicatorCode: string;
+  indicatorName: string;
+  countryCode: string;
+  countryName: string;
+  year: number;
+  value: string; // decimal string, full provider precision
+  unit: string;
+  sourceOrganization: string;
+  sourceNote: string;
+  license: string;
+  sourceUrl: string;
+  providerLastUpdated: string;
+  retrievedAt: string;
+  rawMetadata: Record<string, unknown>;
+  revisions: number;
+}
+
+export interface ProviderInfo {
+  id: string;
+  name: string;
+  dataset: string;
+  authentication: string;
+  status: "available" | "offline" | "error" | "disabled" | "unknown";
+  detail: string;
+  enabled: boolean;
+  storedObservations: number;
+  indicators: { code: string; name: string; unit: string; kind: string; precisionNote: string }[];
+  lastSync: { at: string; status: string; summary: Record<string, unknown> } | null;
+}
+
+export interface SyncReport {
+  provider: string;
+  status: "ok" | "partial" | "error";
+  startedAt: string;
+  finishedAt: string;
+  retrieved: number;
+  unavailable: number;
+  error?: string;
+  indicators: { indicator: string; retrieved: number; unavailable: number | null; created?: number; unchanged?: number; revised?: number; error?: string; unknownCountries?: string[]; missing?: { country: string; year: number; reason: string }[] }[];
+}
+
+export interface EngineResult {
+  status: "OK" | "MISSING_DATA" | "INVALID_INPUT";
+  calculationType: string;
+  formula: string;
+  formulaVersion: string;
+  engineVersion: string;
+  result: string | null;
+  display: string | null;
+  parameters: Record<string, unknown>;
+  inputs: { role: string; value: string; year?: number }[];
+  missing: string[];
+  errors: string[];
+  labels: string[];
+  observations: ExternalObservation[];
+  factId?: string;
+  calculationId?: string;
+}
+
+export interface LineageNode {
+  fact: { id: string; metric: string; value: string; unit: string; factType: FactType; status: FactStatus; year: number; country: string; isPrototype: boolean; provider: string | null; indicatorCode: string | null };
+  source: { id: string; title: string; organization: string; url: string; reliability: Reliability } | null;
+  observation: ExternalObservation | null;
+  calculation: {
+    id: string; type: string; formula: string; formulaVersion: string; engineVersion: string; parameters: Record<string, unknown>;
+    labels: string[]; createdAt: string; storedResult: string | null; recomputedResult: string | null; reproducible: boolean;
+    inputs: (LineageNode & { role: string })[];
+  } | null;
+}
+
+export interface VerifiedEconomics {
+  baseYear: number;
+  engineVersion: string;
+  formulas: string[];
+  note: string;
+  years: { year: number; currency: string; country: string | null; nominalHousehold: string; nominalIsPrototype: true; real: string | null; usd: string | null; missing: string[] }[];
 }
