@@ -196,189 +196,98 @@ def upgrade():
     sa.PrimaryKeyConstraint('snapshot_id', 'external_observation_id')
     )
     with op.batch_alter_table('episode_dataset_snapshots', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('status', sa.String(length=10), nullable=False))
-        batch_op.add_column(sa.Column('notes', sa.Text(), nullable=False))
-        batch_op.add_column(sa.Column('version', sa.Integer(), nullable=False))
+        batch_op.add_column(sa.Column('status', sa.String(length=10), nullable=False, server_default='draft'))
+        batch_op.add_column(sa.Column('notes', sa.Text(), nullable=False, server_default=''))
+        batch_op.add_column(sa.Column('version', sa.Integer(), nullable=False, server_default='1'))
         batch_op.add_column(sa.Column('parent_id', sa.String(length=80), nullable=True))
         batch_op.add_column(sa.Column('finalized_at', sa.String(length=40), nullable=True))
         batch_op.add_column(sa.Column('content_hash', sa.String(length=64), nullable=True))
 
-    with op.batch_alter_table('wage_observations', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('external_observation_id', sa.String(length=160), nullable=False))
-        batch_op.add_column(sa.Column('country', sa.String(length=8), nullable=False))
-        batch_op.add_column(sa.Column('frequency', sa.String(length=10), nullable=False))
-        batch_op.add_column(sa.Column('statistic_type', sa.String(length=14), nullable=False))
-        batch_op.add_column(sa.Column('pay_period', sa.String(length=10), nullable=False))
-        batch_op.add_column(sa.Column('nominal_or_real', sa.String(length=80), nullable=False))
-        batch_op.add_column(sa.Column('gross_or_net', sa.String(length=10), nullable=False))
-        batch_op.add_column(sa.Column('employee_scope', sa.String(length=120), nullable=True))
-        batch_op.add_column(sa.Column('occupation_code', sa.String(length=40), nullable=True))
-        batch_op.add_column(sa.Column('occupation_label', sa.String(length=200), nullable=True))
-        batch_op.add_column(sa.Column('occupation_classification', sa.String(length=40), nullable=True))
-        batch_op.add_column(sa.Column('industry_code', sa.String(length=40), nullable=True))
-        batch_op.add_column(sa.Column('industry_label', sa.String(length=200), nullable=True))
-        batch_op.add_column(sa.Column('industry_classification', sa.String(length=40), nullable=True))
-        batch_op.add_column(sa.Column('education_code', sa.String(length=40), nullable=True))
-        batch_op.add_column(sa.Column('education_label', sa.String(length=200), nullable=True))
-        batch_op.add_column(sa.Column('education_classification', sa.String(length=40), nullable=True))
-        batch_op.add_column(sa.Column('sex', sa.String(length=10), nullable=True))
-        batch_op.add_column(sa.Column('age_group', sa.String(length=40), nullable=True))
-        batch_op.add_column(sa.Column('rural_urban', sa.String(length=10), nullable=True))
-        batch_op.add_column(sa.Column('citizenship', sa.String(length=40), nullable=True))
-        batch_op.add_column(sa.Column('migrant_status', sa.String(length=40), nullable=True))
-        batch_op.add_column(sa.Column('formal_informal', sa.String(length=10), nullable=True))
-        batch_op.add_column(sa.Column('employment_status', sa.String(length=20), nullable=True))
-        batch_op.add_column(sa.Column('full_part_time', sa.String(length=10), nullable=True))
-        batch_op.add_column(sa.Column('survey_name', sa.String(length=200), nullable=True))
-        batch_op.add_column(sa.Column('confidence', sa.String(length=10), nullable=False))
-        batch_op.add_column(sa.Column('notes', sa.Text(), nullable=False))
-        batch_op.add_column(sa.Column('created_at', sa.String(length=40), nullable=False))
-        batch_op.add_column(sa.Column('updated_at', sa.String(length=40), nullable=False))
-        batch_op.alter_column('id',
-               existing_type=sa.VARCHAR(length=160),
-               type_=sa.String(length=200),
-               existing_nullable=False)
-        batch_op.alter_column('region',
-               existing_type=sa.VARCHAR(length=200),
-               nullable=True)
-        batch_op.alter_column('value',
-               existing_type=sa.VARCHAR(length=60),
-               nullable=True)
-        batch_op.alter_column('currency',
-               existing_type=sa.VARCHAR(length=8),
-               nullable=True)
-        batch_op.create_index(batch_op.f('ix_wage_observations_country'), ['country'], unique=False)
-        batch_op.create_index(batch_op.f('ix_wage_observations_external_observation_id'), ['external_observation_id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_wage_observations_provider'), ['provider'], unique=False)
-        batch_op.create_index(batch_op.f('ix_wage_observations_year'), ['year'], unique=False)
-        # WARNING: constraint name is None; this directive will fail as
-        # rendered.  Add a name, or use a naming convention; see
-        # https://alembic.sqlalchemy.org/en/latest/naming.html
-        batch_op.drop_constraint(None, type_='foreignkey')
-        batch_op.create_foreign_key(None, 'external_observations', ['external_observation_id'], ['id'], ondelete='CASCADE')
-        batch_op.drop_column('source_id')
-        batch_op.drop_column('basis')
-        batch_op.drop_column('retrieved_at')
-        batch_op.drop_column('dataset')
-        batch_op.drop_column('country_code')
-        batch_op.drop_column('occupation')
-        batch_op.drop_column('education')
-        batch_op.drop_column('industry')
-        batch_op.drop_column('gender')
-        batch_op.drop_column('sector')
-        batch_op.drop_column('experience_level')
-        batch_op.drop_column('statistic')
+    # Phase 3 left an empty placeholder wage table (nothing ever wrote to it); replace it.
+    bind = op.get_bind()
+    n = bind.execute(sa.text("SELECT COUNT(*) FROM wage_observations")).scalar()
+    if n:
+        raise RuntimeError("wage_observations unexpectedly contains rows; refusing to drop it")
+    op.drop_table('wage_observations')
+    op.create_table('wage_observations',
+    sa.Column('id', sa.String(length=200), nullable=False),
+    sa.Column('external_observation_id', sa.String(length=160), nullable=False),
+    sa.Column('provider', sa.String(length=40), nullable=False),
+    sa.Column('country', sa.String(length=8), nullable=False),
+    sa.Column('region', sa.String(length=200), nullable=True),
+    sa.Column('year', sa.Integer(), nullable=False),
+    sa.Column('period', sa.String(length=20), nullable=False),
+    sa.Column('frequency', sa.String(length=10), nullable=False),
+    sa.Column('statistic_type', sa.String(length=14), nullable=False),
+    sa.Column('pay_period', sa.String(length=10), nullable=False),
+    sa.Column('value', sa.String(length=60), nullable=True),
+    sa.Column('currency', sa.String(length=8), nullable=True),
+    sa.Column('nominal_or_real', sa.String(length=80), nullable=False),
+    sa.Column('gross_or_net', sa.String(length=10), nullable=False),
+    sa.Column('employee_scope', sa.String(length=120), nullable=True),
+    sa.Column('occupation_code', sa.String(length=40), nullable=True),
+    sa.Column('occupation_label', sa.String(length=200), nullable=True),
+    sa.Column('occupation_classification', sa.String(length=40), nullable=True),
+    sa.Column('industry_code', sa.String(length=40), nullable=True),
+    sa.Column('industry_label', sa.String(length=200), nullable=True),
+    sa.Column('industry_classification', sa.String(length=40), nullable=True),
+    sa.Column('education_code', sa.String(length=40), nullable=True),
+    sa.Column('education_label', sa.String(length=200), nullable=True),
+    sa.Column('education_classification', sa.String(length=40), nullable=True),
+    sa.Column('sex', sa.String(length=10), nullable=True),
+    sa.Column('age_group', sa.String(length=40), nullable=True),
+    sa.Column('rural_urban', sa.String(length=10), nullable=True),
+    sa.Column('citizenship', sa.String(length=40), nullable=True),
+    sa.Column('migrant_status', sa.String(length=40), nullable=True),
+    sa.Column('formal_informal', sa.String(length=10), nullable=True),
+    sa.Column('employment_status', sa.String(length=20), nullable=True),
+    sa.Column('full_part_time', sa.String(length=10), nullable=True),
+    sa.Column('source_population', sa.Text(), nullable=False),
+    sa.Column('survey_name', sa.String(length=200), nullable=True),
+    sa.Column('confidence', sa.String(length=10), nullable=False),
+    sa.Column('notes', sa.Text(), nullable=False),
+    sa.Column('created_at', sa.String(length=40), nullable=False),
+    sa.Column('updated_at', sa.String(length=40), nullable=False),
+    sa.ForeignKeyConstraint(['external_observation_id'], ['external_observations.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_wage_observations_country'), 'wage_observations', ['country'], unique=False)
+    op.create_index(op.f('ix_wage_observations_external_observation_id'), 'wage_observations', ['external_observation_id'], unique=False)
+    op.create_index(op.f('ix_wage_observations_provider'), 'wage_observations', ['provider'], unique=False)
+    op.create_index(op.f('ix_wage_observations_year'), 'wage_observations', ['year'], unique=False)
 
+    # Phase 3 snapshots become finalized legacy snapshots; their pinned values move to snapshot_observations.
+    import json
+    rows = bind.execute(sa.text("SELECT id, items, created_at FROM episode_dataset_snapshots")).fetchall()
+    for sid, items, created in rows:
+        for it in (json.loads(items) if isinstance(items, str) else items) or []:
+            bind.execute(sa.text("INSERT OR IGNORE INTO snapshot_observations (snapshot_id, external_observation_id, value, retrieved_at, payload) VALUES (:s,:o,:v,:r,:p)"),
+                         {"s": sid, "o": it["observationId"], "v": it["value"], "r": it.get("retrievedAt", ""), "p": json.dumps(it)})
+        bind.execute(sa.text("UPDATE episode_dataset_snapshots SET status='final', finalized_at=:c, notes='Phase 3 snapshot (legacy, unhashed)' WHERE id=:s"), {"s": sid, "c": created})
+
+    # Immutability is enforced by the database itself, not only by the API.
+    for t in ("snapshot_facts", "snapshot_observations", "snapshot_baselines"):
+        for ev, ref in (("UPDATE", "OLD"), ("DELETE", "OLD"), ("INSERT", "NEW")):
+            op.execute(f"""CREATE TRIGGER {t}_final_{ev.lower()} BEFORE {ev} ON {t}
+                WHEN (SELECT status FROM episode_dataset_snapshots WHERE id = {ref}.snapshot_id) = 'final'
+                BEGIN SELECT RAISE(ABORT, 'dataset snapshot is finalized and immutable'); END;""")
+    op.execute("""CREATE TRIGGER snapshot_final_update BEFORE UPDATE ON episode_dataset_snapshots
+        WHEN OLD.status = 'final' BEGIN SELECT RAISE(ABORT, 'dataset snapshot is finalized and immutable'); END;""")
+    op.execute("""CREATE TRIGGER snapshot_final_delete BEFORE DELETE ON episode_dataset_snapshots
+        WHEN OLD.status = 'final' AND (SELECT COUNT(*) FROM episodes WHERE id = OLD.episode_id) > 0
+        BEGIN SELECT RAISE(ABORT, 'dataset snapshot is finalized and immutable'); END;""")
     # ### end Alembic commands ###
 
 
 def downgrade():
-    # ### commands auto generated by Alembic - please adjust! ###
-    with op.batch_alter_table('wage_observations', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('statistic', sa.VARCHAR(length=10), nullable=False))
-        batch_op.add_column(sa.Column('experience_level', sa.VARCHAR(length=80), nullable=False))
-        batch_op.add_column(sa.Column('sector', sa.VARCHAR(length=40), nullable=False))
-        batch_op.add_column(sa.Column('gender', sa.VARCHAR(length=40), nullable=False))
-        batch_op.add_column(sa.Column('industry', sa.VARCHAR(length=200), nullable=False))
-        batch_op.add_column(sa.Column('education', sa.VARCHAR(length=120), nullable=False))
-        batch_op.add_column(sa.Column('occupation', sa.VARCHAR(length=200), nullable=False))
-        batch_op.add_column(sa.Column('country_code', sa.VARCHAR(length=8), nullable=False))
-        batch_op.add_column(sa.Column('dataset', sa.VARCHAR(length=200), nullable=False))
-        batch_op.add_column(sa.Column('retrieved_at', sa.VARCHAR(length=40), nullable=False))
-        batch_op.add_column(sa.Column('basis', sa.VARCHAR(length=10), nullable=False))
-        batch_op.add_column(sa.Column('source_id', sa.VARCHAR(length=80), nullable=True))
-        # WARNING: constraint name is None; this directive will fail as
-        # rendered.  Add a name, or use a naming convention; see
-        # https://alembic.sqlalchemy.org/en/latest/naming.html
-        batch_op.drop_constraint(None, type_='foreignkey')
-        batch_op.create_foreign_key(None, 'sources', ['source_id'], ['id'], ondelete='SET NULL')
-        batch_op.drop_index(batch_op.f('ix_wage_observations_year'))
-        batch_op.drop_index(batch_op.f('ix_wage_observations_provider'))
-        batch_op.drop_index(batch_op.f('ix_wage_observations_external_observation_id'))
-        batch_op.drop_index(batch_op.f('ix_wage_observations_country'))
-        batch_op.alter_column('currency',
-               existing_type=sa.VARCHAR(length=8),
-               nullable=False)
-        batch_op.alter_column('value',
-               existing_type=sa.VARCHAR(length=60),
-               nullable=False)
-        batch_op.alter_column('region',
-               existing_type=sa.VARCHAR(length=200),
-               nullable=False)
-        batch_op.alter_column('id',
-               existing_type=sa.String(length=200),
-               type_=sa.VARCHAR(length=160),
-               existing_nullable=False)
-        batch_op.drop_column('updated_at')
-        batch_op.drop_column('created_at')
-        batch_op.drop_column('notes')
-        batch_op.drop_column('confidence')
-        batch_op.drop_column('survey_name')
-        batch_op.drop_column('full_part_time')
-        batch_op.drop_column('employment_status')
-        batch_op.drop_column('formal_informal')
-        batch_op.drop_column('migrant_status')
-        batch_op.drop_column('citizenship')
-        batch_op.drop_column('rural_urban')
-        batch_op.drop_column('age_group')
-        batch_op.drop_column('sex')
-        batch_op.drop_column('education_classification')
-        batch_op.drop_column('education_label')
-        batch_op.drop_column('education_code')
-        batch_op.drop_column('industry_classification')
-        batch_op.drop_column('industry_label')
-        batch_op.drop_column('industry_code')
-        batch_op.drop_column('occupation_classification')
-        batch_op.drop_column('occupation_label')
-        batch_op.drop_column('occupation_code')
-        batch_op.drop_column('employee_scope')
-        batch_op.drop_column('gross_or_net')
-        batch_op.drop_column('nominal_or_real')
-        batch_op.drop_column('pay_period')
-        batch_op.drop_column('statistic_type')
-        batch_op.drop_column('frequency')
-        batch_op.drop_column('country')
-        batch_op.drop_column('external_observation_id')
-
+    for t in ("snapshot_facts", "snapshot_observations", "snapshot_baselines"):
+        for ev in ("update", "delete", "insert"):
+            op.execute(f"DROP TRIGGER IF EXISTS {t}_final_{ev}")
+    op.execute("DROP TRIGGER IF EXISTS snapshot_final_update")
+    op.execute("DROP TRIGGER IF EXISTS snapshot_final_delete")
+    for t in ("snapshot_observations", "snapshot_facts", "snapshot_baselines", "income_streams", "economic_baselines", "candidate_reviews",
+              "wage_distribution_bins", "household_units", "evidence_gaps", "character_economic_profiles", "wage_distributions", "wage_observations"):
+        op.drop_table(t)
     with op.batch_alter_table('episode_dataset_snapshots', schema=None) as batch_op:
-        batch_op.drop_column('content_hash')
-        batch_op.drop_column('finalized_at')
-        batch_op.drop_column('parent_id')
-        batch_op.drop_column('version')
-        batch_op.drop_column('notes')
-        batch_op.drop_column('status')
-
-    op.drop_table('snapshot_observations')
-    op.drop_table('snapshot_facts')
-    op.drop_table('snapshot_baselines')
-    with op.batch_alter_table('income_streams', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_income_streams_household_id'))
-
-    op.drop_table('income_streams')
-    with op.batch_alter_table('economic_baselines', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_economic_baselines_episode_id'))
-
-    op.drop_table('economic_baselines')
-    op.drop_table('candidate_reviews')
-    with op.batch_alter_table('wage_distribution_bins', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_wage_distribution_bins_distribution_id'))
-
-    op.drop_table('wage_distribution_bins')
-    with op.batch_alter_table('household_units', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_household_units_episode_id'))
-
-    op.drop_table('household_units')
-    with op.batch_alter_table('evidence_gaps', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_evidence_gaps_gap_key'))
-        batch_op.drop_index(batch_op.f('ix_evidence_gaps_episode_id'))
-
-    op.drop_table('evidence_gaps')
-    with op.batch_alter_table('character_economic_profiles', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_character_economic_profiles_episode_id'))
-
-    op.drop_table('character_economic_profiles')
-    with op.batch_alter_table('wage_distributions', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_wage_distributions_country'))
-
-    op.drop_table('wage_distributions')
-    # ### end Alembic commands ###
+        for c in ("content_hash", "finalized_at", "parent_id", "version", "notes", "status"):
+            batch_op.drop_column(c)
