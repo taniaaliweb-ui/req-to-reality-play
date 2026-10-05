@@ -135,11 +135,11 @@ def test_economics_reconcile_and_death_terminates(srv):
 
 def test_locks_survive_rerun_restart_and_branch(srv):
     c = srv.client()
-    tl = c.get("/timeline", params={"episode_id": EP}).json() if c.get("/timeline", params={"episode_id": EP}).status_code == 200 else []
+    tl = c.get(f"/episodes/{EP}/timeline").json()
     mig = next((e for e in tl if e["category"] == "Migration"), None)
     assert mig, "demo timeline should contain a migration event"
     mig["locked"] = True
-    assert c.put(f"/timeline/{mig['id']}", json=mig).status_code in (200, 201)
+    assert c.patch(f"/episodes/{EP}/timeline/{mig['id']}", json={"locked": True}).status_code in (200, 201)
     _setup(c)
     inp = _input(c)
     assert mig["id"] in inp["lockedTimelineEventIds"]
@@ -194,7 +194,7 @@ def test_monte_carlo_branch_canonical_story_receipt_export(srv):
     # canonical life + timeline integration
     can = c.post(f"/simulation/runs/{mig_run}/canonical").json()
     assert can["isCanonical"]
-    tl = c.get("/timeline", params={"episode_id": EP}).json()
+    tl = c.get(f"/episodes/{EP}/timeline").json()
     assert any(e.get("simulationRunId") == mig_run for e in tl)
     srv.restart()
     c = srv.client()
@@ -233,12 +233,12 @@ def test_monte_carlo_branch_canonical_story_receipt_export(srv):
     st2 = c.get(f"/episodes/{nid}/simulation/canonical").json()
     assert st2["canonical"]["outcome"]["fingerprint"] == run["outcome"]["fingerprint"]
     assert c.get(f"/episodes/{nid}/life-receipt").json()["netWorthAtDeath"] == rc["netWorthAtDeath"]
-    assert len([e for e in c.get("/timeline", params={"episode_id": nid}).json()]) == len(c.get("/timeline", params={"episode_id": EP}).json())
+    assert len([e for e in c.get(f"/episodes/{nid}/timeline").json()]) == len(c.get(f"/episodes/{EP}/timeline").json())
     assert [ch["title"] for ch in c.get(f"/episodes/{nid}/story-engine").json()["chapters"]] == [ch["title"] for ch in story["chapters"]]
     snaps_new = c.get(f"/episodes/{nid}/snapshots").json()
     assert snaps_new and all(s["status"] == "final" for s in snaps_new)
-    facts_a = sorted((f["metric"], f["value"]) for f in c.get("/facts", params={"episode_id": EP}).json())
-    facts_b = sorted((f["metric"], f["value"]) for f in c.get("/facts", params={"episode_id": nid}).json())
+    facts_a = sorted((f["metric"], f["value"]) for f in c.get(f"/episodes/{EP}/facts").json())
+    facts_b = sorted((f["metric"], f["value"]) for f in c.get(f"/episodes/{nid}/facts").json())
     assert facts_a == facts_b
     # bad archive version
     assert c.post("/archives/import", json={"archive": {**arc, "version": 99}}).status_code == 422
