@@ -590,6 +590,14 @@ def life_matrix(db: Session, episode_id: str, with_detail: bool = False) -> dict
                                     "household_spending": ("multi-generational-households", "social-status")}.get(dom, ()))]
             extra += [{"type": "context", **c} for c in ctx]
             cell_gaps = [g for g in gaps if g.gap_key == f"life:{st_key}:{dom}" or (g.life_stage == st_key and g.domain == dom)]
+            ev_n = sum(1 for c in cov if c["coverage"] in ("DIRECT", "NEARBY", "DERIVED"))
+            as_n = sum(1 for c in cov if c["coverage"] == "ASSUMED")
+            ev_status = "MISSING" if not cov or ev_n == 0 else "VERIFIED" if ev_n == len(cov) and status == "READY" else "PARTIALLY VERIFIED"
+            sim_status = ev_status if ev_status == "VERIFIED" else ("ASSUMPTION-COVERED" if ev_status == "MISSING" and as_n else
+                                                                     "PARTIALLY VERIFIED" if ev_status != "MISSING" else "MISSING")
+            if status == "NOT_APPLICABLE":
+                ev_status = sim_status = "NOT_APPLICABLE"
+            cell.update(evidenceStatus=ev_status, simulationStatus=sim_status, assumedYears=as_n)
             cell.update(status=status, reasons=reasons, coverage=cov,
                         counts={k: sum(1 for c in cov if c["coverage"] == k) for k in ("DIRECT", "NEARBY", "DERIVED", "ASSUMED", "MISSING")},
                         supportingCount=len(supporting), assumptionCount=len(asm), gapCount=sum(1 for g in cell_gaps if g.status == "open"))
