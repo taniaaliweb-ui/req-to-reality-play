@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routers import data, labor, life, resources, system
+from app.api.routers import data, labor, life, resources, simulation, system
 from app.core.config import API_PREFIX, CORS_ORIGIN_REGEX, SEED_DEMO
 from app.db.database import SessionLocal, ping
 from app.db.migrate import upgrade_to_head
@@ -27,12 +27,17 @@ async def lifespan(_: FastAPI):
     log.info("Database %s", "connected" if ping() else "UNAVAILABLE")
     with SessionLocal() as db:
         seed_life_registry(db)  # reference registry (unverified events/policies), idempotent
+        from app.services.repository import now_iso
+        from app.simulation import priors as sim_priors
+        from app.simulation import run as sim_run
+        sim_priors.seed_priors(db, now_iso())  # provisional prior registry, idempotent
+        sim_run.recover_jobs(db)
         if SEED_DEMO:
             seed_demo(db)
     yield
 
 
-app = FastAPI(title="LifeSpan Backend", version="0.5.0", lifespan=lifespan)
+app = FastAPI(title="LifeSpan Backend", version="0.6.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origin_regex=CORS_ORIGIN_REGEX, allow_methods=["*"], allow_headers=["*"])
 
 
@@ -55,3 +60,4 @@ app.include_router(resources.router, prefix=API_PREFIX)
 app.include_router(data.router, prefix=API_PREFIX)
 app.include_router(labor.router, prefix=API_PREFIX)
 app.include_router(life.router, prefix=API_PREFIX)
+app.include_router(simulation.router, prefix=API_PREFIX)

@@ -22,6 +22,7 @@ def make_engine(url: str = DATABASE_URL):
         def _fk_on(dbapi_conn, _):  # enforce real foreign keys in SQLite
             cur = dbapi_conn.cursor()
             cur.execute("PRAGMA foreign_keys=ON")
+            cur.execute("PRAGMA busy_timeout=10000")  # background simulation jobs write concurrently
             cur.close()
 
     return eng
