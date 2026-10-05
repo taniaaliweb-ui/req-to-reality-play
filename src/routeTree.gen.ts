@@ -15,6 +15,7 @@ import { Route as DataRouteImport } from './routes/data'
 import { Route as DnaRouteImport } from './routes/dna'
 import { Route as EconomicsRouteImport } from './routes/economics'
 import { Route as FactsRouteImport } from './routes/facts'
+import { Route as LaborRouteImport } from './routes/labor'
 import { Route as ProductionRouteImport } from './routes/production'
 import { Route as ReceiptRouteImport } from './routes/receipt'
 import { Route as ResearchRouteImport } from './routes/research'
@@ -55,6 +56,11 @@ const EconomicsRoute = EconomicsRouteImport.update({
 const FactsRoute = FactsRouteImport.update({
   id: '/facts',
   path: '/facts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LaborRoute = LaborRouteImport.update({
+  id: '/labor',
+  path: '/labor',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProductionRoute = ProductionRouteImport.update({
@@ -120,6 +126,7 @@ export interface FileRoutesByFullPath {
   '/dna': typeof DnaRoute
   '/economics': typeof EconomicsRoute
   '/facts': typeof FactsRoute
+  '/labor': typeof LaborRoute
   '/production': typeof ProductionRoute
   '/receipt': typeof ReceiptRoute
   '/research': typeof ResearchRoute
@@ -139,6 +146,7 @@ export interface FileRoutesByTo {
   '/dna': typeof DnaRoute
   '/economics': typeof EconomicsRoute
   '/facts': typeof FactsRoute
+  '/labor': typeof LaborRoute
   '/production': typeof ProductionRoute
   '/receipt': typeof ReceiptRoute
   '/research': typeof ResearchRoute
@@ -159,6 +167,7 @@ export interface FileRoutesById {
   '/dna': typeof DnaRoute
   '/economics': typeof EconomicsRoute
   '/facts': typeof FactsRoute
+  '/labor': typeof LaborRoute
   '/production': typeof ProductionRoute
   '/receipt': typeof ReceiptRoute
   '/research': typeof ResearchRoute
@@ -180,6 +189,7 @@ export interface FileRouteTypes {
     | '/dna'
     | '/economics'
     | '/facts'
+    | '/labor'
     | '/production'
     | '/receipt'
     | '/research'
@@ -199,6 +209,7 @@ export interface FileRouteTypes {
     | '/dna'
     | '/economics'
     | '/facts'
+    | '/labor'
     | '/production'
     | '/receipt'
     | '/research'
@@ -218,6 +229,7 @@ export interface FileRouteTypes {
     | '/dna'
     | '/economics'
     | '/facts'
+    | '/labor'
     | '/production'
     | '/receipt'
     | '/research'
@@ -238,6 +250,7 @@ export interface RootRouteChildren {
   DnaRoute: typeof DnaRoute
   EconomicsRoute: typeof EconomicsRoute
   FactsRoute: typeof FactsRoute
+  LaborRoute: typeof LaborRoute
   ProductionRoute: typeof ProductionRoute
   ReceiptRoute: typeof ReceiptRoute
   ResearchRoute: typeof ResearchRoute
@@ -293,6 +306,13 @@ declare module '@tanstack/react-router' {
       path: '/facts'
       fullPath: '/facts'
       preLoaderRoute: typeof FactsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/labor': {
+      id: '/labor'
+      path: '/labor'
+      fullPath: '/labor'
+      preLoaderRoute: typeof LaborRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/production': {
@@ -382,6 +402,7 @@ const rootRouteChildren: RootRouteChildren = {
   DnaRoute: DnaRoute,
   EconomicsRoute: EconomicsRoute,
   FactsRoute: FactsRoute,
+  LaborRoute: LaborRoute,
   ProductionRoute: ProductionRoute,
   ReceiptRoute: ReceiptRoute,
   ResearchRoute: ResearchRoute,

@@ -3,6 +3,9 @@ import type { ReactNode } from "react";
 import {
   LayoutDashboard, BookOpen, Search, Table2, Library, GitBranch, PenLine, ShieldCheck, Clapperboard, Settings,
   Activity, Cpu, Database, CalendarRange, Wallet, Receipt,
+  Briefcase,
+  Factory,
+  Lock,
 } from "lucide-react";
 import { useLifespan } from "@/hooks/useLifespan";
 import { STAGE_LABELS, WORKFLOW_STAGES } from "@/types/lifespan";
@@ -18,6 +21,9 @@ const NAV = [
   { to: "/timeline", label: "Timeline", icon: CalendarRange },
   { to: "/simulation", label: "Simulation", icon: GitBranch },
   { to: "/economics", label: "Economic Ledger", icon: Wallet },
+  { to: "/evidence", label: "Employment Evidence", icon: Briefcase },
+  { to: "/labor", label: "Labor Data", icon: Factory },
+  { to: "/snapshots", label: "Dataset Snapshots", icon: Lock },
   { to: "/story", label: "Story", icon: PenLine },
   { to: "/audits", label: "Audits", icon: ShieldCheck },
   { to: "/production", label: "Production", icon: Clapperboard },
