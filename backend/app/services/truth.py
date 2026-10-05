@@ -119,7 +119,7 @@ def fact_for_observation(db: Session, episode_id: str, o: m.ExternalObservation)
             f"Published statistic for the population described in the metric (source: {o.source_note[:300]}). "
             f"It describes that population, not any individual character. Retrieved {o.retrieved_at}.")
     fields = dict(
-        episode_id=episode_id, category="Employment" if labour else "Economy", metric=f"{o.country_name} {o.year}: {o.indicator_name}", value=o.value, unit=o.unit,
+        episode_id=episode_id, category="Employment" if labour else "Economy", metric=(f"{o.country_name} {o.year}: {o.indicator_name}" if labour else f"{o.country_name} {o.indicator_name}"), value=o.value, unit=o.unit,
         country=o.country_name, region=((o.raw_metadata or {}).get("region") or "National"), year_start=o.year, year_end=o.year, source_id=sid, confidence="high",
         fact_type="FACT", derived_from=None, notes=note, status="verified", currency=(o.raw_metadata or {}).get("currency"), external_observation_id=o.id,
         provider=o.provider, dataset=o.dataset, indicator_code=o.indicator_code, is_prototype=False,
