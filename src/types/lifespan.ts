@@ -208,6 +208,7 @@ export interface TimelineEvent extends BaseRecord {
   confidence: Level;
   factIds: string[];
   simulationReason: string;
+  simulationRunId?: string | null;
   locked: boolean;
 }
 
