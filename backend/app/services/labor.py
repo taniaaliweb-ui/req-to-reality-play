@@ -642,17 +642,17 @@ def readiness(db: Session, episode_id: str) -> dict:
             why.append("Baseline drafted but not approved")
         else:
             pr = [p for p in profiles if p.life_stage == key]
-            best = max((c["score"] for p in pr for c in candidates(db, p, 3)["candidates"] if c["countryMatch"]), default=None)
+            best = max((c["score"] for p in pr for c in candidates(db, p, 25)["candidates"] if c["countryMatch"] and c["yearDistance"] <= 5), default=None)
             cat = {"housing": "Housing", "education": "Education"}.get(key)
             if best is not None and best >= 35:
                 st = "PARTIAL"
-                why.append(f"Candidate evidence found (best score {best}/100) but no baseline")
+                why.append(f"Candidate evidence within 5 years found (best score {best}/100) but no baseline")
             elif cat and any(f.category == cat for f in facts):
                 st = "PARTIAL"
                 why.append(f"Verified {cat.lower()} facts exist but no baseline")
             else:
                 st = "MISSING"
-                why.append("No profile evidence" if pr else "No profile or evidence for this stage")
+                why.append("No evidence within 5 years of the profile's target year" if pr else "No profile or evidence for this stage")
         out.append({"stage": key, "label": label, "status": st, "reasons": why})
     pct = round(100 * sum(1 if s["status"] == "READY" else 0.5 if s["status"] == "PARTIAL" else 0 for s in out) / len(out))
     return {"stages": out, "overall": pct, "note": "Measures whether required evidence exists — not prediction confidence."}
