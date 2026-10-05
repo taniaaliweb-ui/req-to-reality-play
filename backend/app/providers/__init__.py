@@ -6,6 +6,7 @@ import os
 from app.providers.ilostat import ILOStatProvider
 from app.providers.manual import ManualProvider
 from app.providers.official_import import IndiaMoSPIProvider, UAEStatProvider
+from app.providers.un_wpp import UNWPPProvider
 from app.providers.world_bank import WorldBankProvider
 
 
@@ -24,6 +25,12 @@ def get_ilostat() -> ILOStatProvider:
         from app.providers.fixtures import ilo_fixture_transport
         return ILOStatProvider(transport=ilo_fixture_transport(fixture_dir))
     return ILOStatProvider()
+
+
+def get_un_wpp() -> UNWPPProvider:
+    # LIFESPAN_WPP_FIXTURE_FILE points tests at a recorded (trimmed) copy of the official CSV.
+    from app.core.config import DATA_DIR
+    return UNWPPProvider(cache_dir=DATA_DIR / "cache", fixture_file=os.environ.get("LIFESPAN_WPP_FIXTURE_FILE") or None)
 
 
 manual_provider = ManualProvider()

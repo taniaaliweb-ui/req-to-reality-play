@@ -15,6 +15,7 @@ from app.db.database import get_db
 from app.providers.base import ProviderError
 from app.services import economic_engine as eng
 from app.services import repository as repo
+from app.services import life_context as life
 from app.services import truth
 
 router = APIRouter()
@@ -30,7 +31,7 @@ class In(BaseModel):
 
 
 class SyncReq(In):
-    indicators: list[str] = Field(min_length=1, max_length=10)
+    indicators: list[str] = Field(min_length=1, max_length=20)
     countries: list[Country] = Field(min_length=1, max_length=20)
     yearStart: Year
     yearEnd: Year
@@ -115,6 +116,20 @@ def list_providers(db: DB, check: bool = False):
         il_status, il_detail = (("error" if il_last.status == "error" else "available"), il_last.summary.get("error", "")) if il_last else ("unknown", "Not checked")
     out.append({**ilo.describe(), "status": il_status, "detail": il_detail, "enabled": il_en, "storedObservations": il_n,
                 "lastSync": {"at": il_last.finished_at, "status": il_last.status, "summary": il_last.summary} if il_last else None})
+    # UN WPP (official bulk CSV, cached locally)
+    wpp = providers.get_un_wpp()
+    w_last = db.scalar(select(m.ProviderSync).where(m.ProviderSync.provider == "un-wpp").order_by(m.ProviderSync.started_at.desc()))
+    w_n = db.scalar(select(func.count()).select_from(m.ExternalObservation).where(m.ExternalObservation.provider == "un-wpp")) or 0
+    w_en = st["externalDataEnabled"] and st.get("unWppEnabled", True)
+    if not w_en:
+        w_status, w_detail = "disabled", "Disabled in Settings."
+    elif check:
+        ok, kind = wpp.ping()
+        w_status, w_detail = ("available", "Official bulk file reachable") if ok else (("available", f"Offline ({kind}); using cached file") if wpp.cached() else ("offline" if kind in ("network", "timeout") else "error", kind))
+    else:
+        w_status, w_detail = (("error" if w_last.status == "error" else "available"), w_last.summary.get("error", "")) if w_last else ("unknown", "Not checked")
+    out.append({**wpp.describe(), "mode": "BULK_DATASET", "status": w_status, "detail": w_detail + (" · cached locally" if wpp.cached() else " · not downloaded yet"),
+                "enabled": w_en, "storedObservations": w_n, "lastSync": {"at": w_last.finished_at, "status": w_last.status, "summary": w_last.summary} if w_last else None})
     for p in (providers.uae_provider, providers.india_provider):
         n = db.scalar(select(func.count()).select_from(m.ExternalObservation).where(m.ExternalObservation.provider == p.provider_id)) or 0
         live = None
@@ -148,6 +163,8 @@ def sync_world_bank(db: DB, req: SyncReq):
             per.append({"indicator": ind, "error": str(e), "kind": e.kind, "retrieved": 0, "unavailable": None})
             break
         counts = truth.store_observations(db, res.observations)
+        db.flush()
+        counts["lifeObservations"] = life.normalize_world_bank(db, res.observations)
         if res.missing or res.countries_unknown:
             status = "partial" if status == "ok" else status
         per.append({"indicator": ind, "retrieved": len(res.observations), "unavailable": len(res.missing), "missing": res.missing[:200],
@@ -257,5 +274,6 @@ def list_snapshots(eid: IdPath, db: DB):
 
 @router.get("/engine")
 def engine_info():
-    return {"truthEngine": "online", "economicEngine": "online", "engineVersion": eng.ENGINE_VERSION,
+    return {"truthEngine": "online", "economicEngine": "online", "laborEvidenceEngine": "online", "lifeContextEngine": "online", "datasetSnapshots": "online",
+            "simulationEngine": "not-implemented", "engineVersion": eng.ENGINE_VERSION,
             "formulas": [eng.INFLATION_FORMULA, eng.FX_FORMULA], "rounding": "Decimal, 28 significant digits; stored unrounded; display ROUND_HALF_EVEN to 2 dp"}
