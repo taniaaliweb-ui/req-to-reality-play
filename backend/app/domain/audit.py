@@ -139,8 +139,9 @@ def run_audits(db: Session, episode_id: str) -> list[dict]:
         push("Economic", "PASS", f"{len(calcs)} derived value(s) have complete lineage", "Every saved calculation has its inputs, formula and engine version.")
 
     _labour_audits(db, episode_id, facts, push)
+    _life_audits(db, episode_id, facts, events, push)
 
-    push("Historical", "WARNING", "Historical consistency not yet verified", "Requires Audit Worker + dated event datasets (later phase).", automated=False)
+    push("Historical", "WARNING", "Story-level historical consistency not yet verified", "Event registry relevance is automated; checking narrative against history needs a later Audit Worker.", automated=False)
     cultural = [f for f in facts if f.category == "Social environment" and f.fact_type == "ASSUMPTION"]
     push("Bias", "WARNING" if cultural else "PASS",
          "Cultural assumptions may encode stereotypes" if cultural else "No flagged cultural assumptions",
@@ -215,3 +216,84 @@ def _labour_audits(db: Session, episode_id: str, facts: list, push) -> None:
         push("Economic", "FAIL", "Finalized dataset snapshot modified", "Snapshot contents no longer match the hash recorded when it was finalized.", tampered)
     if bls and not (outside or net_bad or annual_bad or no_cpi or proto or revised or tampered):
         push("Economic", "PASS", f"{len(bls)} economic baseline(s) pass labour-evidence rules", "Evidence, lineage and labelling checks passed.")
+
+
+def _life_audits(db: Session, episode_id: str, facts: list, events: list, push) -> None:
+    """Phase 5 life-context rules (backend only)."""
+    from app.services import labor
+    from app.services import life_context as life
+    from app.services.repository import get_settings
+    lo_by_ext = {lo.external_observation_id: lo for lo in db.scalars(select(m.LifeObservation).where(
+        m.LifeObservation.external_observation_id.in_([f.external_observation_id for f in facts if f.external_observation_id])))}
+    # Wage anchors stretched over a whole stage
+    stretched = []
+    for b in db.scalars(select(m.EconomicBaseline).where(m.EconomicBaseline.episode_id == episode_id)):
+        if b.baseline_type == "FACT_SUPPORTED" and labor.wage_anchor_coverage(b)["unresolvedYears"]:
+            stretched.append(b.id)
+    if stretched:
+        push("Economic", "WARNING", "Direct wage evidence used outside its anchor year",
+             "A wage observation is direct evidence only for its own year; remaining stage years are unresolved until more observations, a methodology or an explicit assumption exist.", stretched)
+    # National statistic presented as a city fact
+    city = [f.id for f in facts if not f.is_prototype and f.region and f.external_observation_id in lo_by_ext and lo_by_ext[f.external_observation_id].geo_level == "NATIONAL"]
+    if city:
+        push("Geographic", "FAIL", "National statistic represented as a city/regional fact", "National evidence must not become a city-level fact without extra evidence or explicit estimation.", city)
+    # Population statistic used as an individual outcome
+    pop_fact = {f.id for f in facts if f.external_observation_id in lo_by_ext and lo_by_ext[f.external_observation_id].domain in ("mortality", "fertility", "family_formation", "migration")}
+    indiv = [e.id for e in events if set(e.fact_ids or []) & pop_fact and e.category in ("Health", "Family", "Relationships", "Migration") and not e.simulation_reason]
+    indiv += [f.id for f in facts if f.id in pop_fact and re.search(r"\bcharacter\b|\bdies\b|\bwill have\b", f.metric or "", re.I)]
+    if indiv:
+        push("Fact", "FAIL", "Population statistic represented as an individual outcome", "Life expectancy, fertility or migration rates describe populations; the character's outcome is probabilistic (Phase 6).", indiv)
+    # Qualitative claims stored as quantitative FACT
+    qual = []
+    for f in facts:
+        if f.is_prototype or f.fact_type != "FACT" or f.external_observation_id:
+            continue
+        try:
+            float(str(f.value).replace(",", "").replace("%", ""))
+        except ValueError:
+            qual.append(f.id)
+    if qual:
+        push("Fact", "FAIL", "Qualitative context represented as a quantitative FACT", "Non-numeric claims belong in the Context Evidence registry with source and scope.", qual)
+    # Life-stage baselines
+    lbs = list(db.scalars(select(m.LifeStageBaseline).where(m.LifeStageBaseline.episode_id == episode_id)))
+    nosrc = [b.id for b in lbs if not b.evidence and not b.assumption_ids]
+    ext = [b.id for b in lbs if any(c.get("coverage") == "MISSING" for c in b.coverage or [])]
+    proto = [b.id for b in lbs if any((db.get(m.LifeObservation, e.get("lifeObservationId")) or m.LifeObservation(is_prototype=False)).is_prototype for e in b.evidence or [])]
+    if nosrc:
+        push("Assumption", "FAIL", "Life-stage baseline missing source", "Every baseline needs selected evidence or a registered assumption.", nosrc)
+    if ext:
+        push("Assumption", "FAIL", "Unsupported period extension", "Baseline covers years with no evidence inside the domain validity window.", ext)
+    if proto:
+        push("Assumption", "FAIL", "Prototype observation used as verified baseline", "PROTOTYPE evidence cannot support a baseline.", proto)
+    if lbs and not (nosrc or ext or proto):
+        push("Assumption", "PASS", f"{len(lbs)} life-stage baseline(s) have sources and in-window coverage", "Checked evidence, coverage and prototype use.")
+    # Finalized snapshots must carry the assumptions their baselines rely on
+    missing_asm = []
+    for snap in db.scalars(select(m.EpisodeDatasetSnapshot).where(m.EpisodeDatasetSnapshot.episode_id == episode_id, m.EpisodeDatasetSnapshot.status == "final")):
+        recs = list(db.scalars(select(m.SnapshotRecord).where(m.SnapshotRecord.snapshot_id == snap.id)))
+        if not recs:
+            continue
+        have = {r.record_id for r in recs if r.record_type == "assumption"}
+        need = {a for r in recs if r.record_type == "life-baseline" for a in r.payload.get("assumptionIds", [])}
+        fact_ids = {r.fact_id for r in db.scalars(select(m.SnapshotFact).where(m.SnapshotFact.snapshot_id == snap.id))}
+        need_f = {r.payload.get("assumptionFactId") for r in db.scalars(select(m.SnapshotBaseline).where(m.SnapshotBaseline.snapshot_id == snap.id))} - {None}
+        if need - have or need_f - fact_ids:
+            missing_asm.append(snap.id)
+    if missing_asm:
+        push("Assumption", "FAIL", "Finalized snapshot missing assumption record", "Baselines in the snapshot reference assumptions that were not frozen with it.", missing_asm)
+    # Readiness vs gaps
+    try:
+        mx = life.life_matrix(db, episode_id)
+    except LookupError:
+        return
+    open_high = {(g.life_stage, g.domain) for g in db.scalars(select(m.EvidenceGap).where(m.EvidenceGap.episode_id == episode_id, m.EvidenceGap.status == "open",
+                                                                                             m.EvidenceGap.priority == "HIGH"))}
+    bad = [s["stage"] for s in mx["stages"] if s["status"] == "READY" and any((s["stage"], c["domain"]) in open_high for c in s["cells"] if c["critical"])]
+    if bad:
+        push("Assumption", "WARNING", "Life stage marked READY with critical evidence gaps", "Resolve or close the open HIGH-priority gaps for these stages.", bad)
+    rd = life.readiness_v2(db, episode_id, list(get_settings(db).get("simulationRequiredDomains") or []))
+    push("Assumption", "PASS" if rd["overall"] == "READY" else "WARNING", f"Simulation readiness: {rd['overall'].replace('_', ' ')}",
+         "Required domains still missing: " + "; ".join(rd["blocking"][:8]) if rd["blocking"] else "All required life domains have evidence.", [])
+    rel_unverified = sorted({e.id for e in db.scalars(select(m.HistoricalEvent).where(m.HistoricalEvent.verification != "verified"))})
+    if rel_unverified:
+        push("Historical", "WARNING", f"{len(rel_unverified)} historical event(s) not yet verified", "Registry entries must be checked against their cited organisation before counting as verified context.", rel_unverified[:20])

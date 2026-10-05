@@ -6,6 +6,8 @@ import {
   Briefcase,
   Factory,
   Lock,
+  Layers,
+  Globe2,
 } from "lucide-react";
 import { useLifespan } from "@/hooks/useLifespan";
 import { STAGE_LABELS, WORKFLOW_STAGES } from "@/types/lifespan";
@@ -23,6 +25,8 @@ const NAV = [
   { to: "/economics", label: "Economic Ledger", icon: Wallet },
   { to: "/evidence", label: "Employment Evidence", icon: Briefcase },
   { to: "/labor", label: "Labor Data", icon: Factory },
+  { to: "/life-evidence", label: "Life Evidence", icon: Layers },
+  { to: "/life-data", label: "Life Context Data", icon: Globe2 },
   { to: "/snapshots", label: "Dataset Snapshots", icon: Lock },
   { to: "/story", label: "Story", icon: PenLine },
   { to: "/audits", label: "Audits", icon: ShieldCheck },

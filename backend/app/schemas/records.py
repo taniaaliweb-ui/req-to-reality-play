@@ -213,6 +213,9 @@ class SettingsIn(Schema):
     world_bank_enabled: bool = True
     ilostat_enabled: bool = True
     uae_stat_enabled: bool = True
+    un_wpp_enabled: bool = True
+    # Readiness groups a full-life simulation must have evidence for (user may override with explicit assumptions later)
+    simulation_required_domains: list[str] = ["demographic", "education", "career", "household", "family", "migration", "housing", "retirement"]
 
 
 class AuditOut(Schema):

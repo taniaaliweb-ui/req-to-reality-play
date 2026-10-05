@@ -479,7 +479,7 @@ def create_baseline(db: Session, episode_id: str, req: dict) -> m.EconomicBaseli
                 raise BaselineError("CPI adjustment not possible: " + "; ".join(r.get("missing") or r.get("errors") or ["missing data"]))
             calc_ids.append(r["calculationId"])
             fact_ids.append(r["factId"])
-            ev["derivedFactId"], ev["derivedValue"] = r["factId"], r["result"]
+            ev["derivedFactId"], ev["derivedValue"], ev["adjustedToYear"] = r["factId"], r["result"], int(req["adjustToYear"])
             derived.append(Decimal(r["result"]))
         values = derived
         if any(s["yearDistance"] > 5 for s in scores):
@@ -551,7 +551,31 @@ def baseline_out(db: Session, b: m.EconomicBaseline) -> dict:
             "grossOrNet": b.gross_or_net, "annualization": b.annualization, "confidence": b.confidence, "confidenceReasons": b.confidence_reasons,
             "reasoning": b.reasoning, "evidence": b.evidence, "sourceFactIds": b.source_fact_ids, "derivedCalculationIds": b.derived_calculation_ids,
             "assumptionFactId": b.assumption_fact_id, "userApproved": b.user_approved, "approvedAt": b.approved_at, "createdAt": b.created_at,
-            "pinnedInSnapshot": pinned, "prototypeIncome": {"isPrototype": True, "note": "Economic Ledger demo values (annual, PROTOTYPE) — not replaced", "years": proto}}
+            "pinnedInSnapshot": pinned, "temporalCoverage": wage_anchor_coverage(b), "prototypeIncome": {"isPrototype": True, "note": "Economic Ledger demo values (annual, PROTOTYPE) — not replaced", "years": proto}}
+
+
+def wage_anchor_coverage(b: m.EconomicBaseline) -> dict:
+    """Phase 5 correction: a wage observation is an ANCHOR for its own year, not direct evidence for a
+    whole life stage. Years outside the anchor(s) are NEARBY (within the wage validity window), DERIVED
+    (stored CPI calculation for that year), ASSUMED (assumption baseline) or MISSING (unresolved)."""
+    from app.services.life_context import VALIDITY_WINDOW, coverage_for_years
+    anchors = sorted({int(ev["sourceYear"]) for ev in b.evidence or [] if ev.get("sourceYear") is not None})
+    derived: set[int] = set()
+    if b.baseline_type == "DERIVED":
+        derived = {int(ev.get("adjustedToYear") or 0) for ev in b.evidence or []} - {0}
+    years = list(range(b.year_start, b.year_end + 1))
+    assumed = set(years) if b.baseline_type == "ASSUMPTION" else set()
+    cov = coverage_for_years(years, {y: [] for y in anchors}, VALIDITY_WINDOW["income"], derived_years=derived, assumed_years=assumed)
+    counts: dict[str, int] = {}
+    for c in cov:
+        counts[c["coverage"]] = counts.get(c["coverage"], 0) + 1
+    return {"semantics": "WAGE_ANCHOR" if anchors else ("ASSUMPTION" if assumed else "NONE"),
+            "anchors": [{"year": ev.get("sourceYear"), "value": ev.get("value"), "population": ev.get("population"), "statisticType": ev.get("statisticType"),
+                         "observationId": ev.get("observationId")} for ev in b.evidence or []],
+            "directCoverage": anchors, "stage": [b.year_start, b.year_end], "windowYears": VALIDITY_WINDOW["income"], "years": cov, "counts": counts,
+            "unresolvedYears": [c["year"] for c in cov if c["coverage"] == "MISSING"],
+            "note": ("Observed wage is direct evidence only for its anchor year(s). Other years need more observations, an interpolation or wage-index "
+                     "methodology, or an explicit assumption — otherwise they remain unresolved.")}
 
 
 # ---------------------------------------------------------------- gaps + readiness
@@ -589,7 +613,7 @@ def detect_gaps(db: Session, episode_id: str) -> list[m.EvidenceGap]:
                                        category=cat, country=ep.character.country if ep and ep.character else "", year_start=yrs[0], year_end=yrs[1], priority="MEDIUM")
     existing = {g.gap_key: g for g in db.scalars(select(m.EvidenceGap).where(m.EvidenceGap.episode_id == episode_id))}
     for key, g in existing.items():
-        if g.auto and key not in found and g.status == "open":
+        if g.auto and key not in found and g.status == "open" and not key.startswith("life:"):  # life:* gaps belong to the life-context engine
             g.status = "resolved"
     for key, v in found.items():
         g = existing.get(key)
@@ -607,10 +631,11 @@ def detect_gaps(db: Session, episode_id: str) -> list[m.EvidenceGap]:
 def gap_out(g: m.EvidenceGap) -> dict:
     return {"id": g.id, "episodeId": g.episode_id, "gapKey": g.gap_key, "title": g.title, "reason": g.reason, "category": g.category, "country": g.country,
             "yearStart": g.year_start, "yearEnd": g.year_end, "priority": g.priority, "status": g.status, "auto": g.auto, "researchTaskId": g.research_task_id,
-            "createdAt": g.created_at}
+            "createdAt": g.created_at, "domain": g.domain, "lifeStage": g.life_stage, "targetPopulation": g.target_population}
 
 
-TASK_CATEGORY = {"Employment": "Employment", "Migration": "Migration", "Education": "Education", "Housing": "Housing", "Economy": "Economy"}
+TASK_CATEGORY = {"Employment": "Employment", "Migration": "Migration", "Education": "Education", "Housing": "Housing", "Economy": "Economy",
+                 "Demographics": "Demographics", "Social environment": "Social environment", "Historical context": "Historical context"}
 
 
 def task_from_gap(db: Session, g: m.EvidenceGap) -> m.ResearchTask:

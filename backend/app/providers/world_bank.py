@@ -21,6 +21,31 @@ INDICATORS: dict[str, IndicatorDef] = {
                                 "Annual period average — not a daily or spot rate."),
 }
 
+# Phase 5 contextual indicators. Each has a clear LifeSpan purpose and maps to one life-evidence
+# domain (see LIFE_MAP). Population statistics — never individual outcomes.
+_CTX = [
+    ("SE.PRM.ENRR", "School enrollment, primary (% gross)", "% gross", "education", "enrollment_rate", None, "PRIMARY"),
+    ("SE.SEC.ENRR", "School enrollment, secondary (% gross)", "% gross", "education", "enrollment_rate", None, "SECONDARY"),
+    ("SE.TER.ENRR", "School enrollment, tertiary (% gross)", "% gross", "education", "enrollment_rate", None, "TERTIARY"),
+    ("SE.PRM.CMPT.ZS", "Primary completion rate, total (% of relevant age group)", "% of relevant age group", "education", "completion_rate", None, "PRIMARY"),
+    ("SE.ADT.LITR.ZS", "Literacy rate, adult total (% of people ages 15 and above)", "% of ages 15+", "education", "literacy_rate", None, None),
+    ("SP.URB.TOTL.IN.ZS", "Urban population (% of total population)", "% of total population", "demographic", "urban_share", None, None),
+    ("SP.RUR.TOTL.ZS", "Rural population (% of total population)", "% of total population", "demographic", "rural_share", None, None),
+    ("SL.UEM.TOTL.ZS", "Unemployment, total (% of total labor force) (modeled ILO estimate)", "% of labour force", "employment_context", "unemployment_rate", None, None),
+    ("SL.TLF.CACT.ZS", "Labor force participation rate, total (% of total population ages 15+) (modeled ILO estimate)", "% of ages 15+", "employment_context", "lfp_rate", None, None),
+    ("SP.DYN.LE00.MA.IN", "Life expectancy at birth, male (years)", "years", "mortality", "life_expectancy", "MALE", None),
+    ("SP.DYN.IMRT.IN", "Mortality rate, infant (per 1,000 live births)", "per 1,000 live births", "mortality", "infant_mortality", None, None),
+    ("SP.DYN.TFRT.IN", "Fertility rate, total (births per woman)", "births per woman", "fertility", "total_fertility_rate", "FEMALE", None),
+    ("SM.POP.TOTL", "International migrant stock, total", "persons", "migration", "migrant_stock", None, None),
+    ("SM.POP.NETM", "Net migration", "persons", "migration", "net_migration", None, None),
+    ("BX.TRF.PWKR.CD.DT", "Personal remittances, received (current US$)", "current US$", "migration", "remittances_received", None, None),
+    ("SP.POP.65UP.TO.ZS", "Population ages 65 and above (% of total population)", "% of total population", "retirement", "population_65plus_share", None, "65+"),
+]
+LIFE_MAP: dict[str, dict] = {}
+for _code, _name, _unit, _dom, _metric, _sex, _lvl in _CTX:
+    INDICATORS[_code] = IndicatorDef(_code, _name, _unit, "context")
+    LIFE_MAP[_code] = {"domain": _dom, "metric": _metric, "sex": _sex, "level": _lvl}
+
 
 class WorldBankProvider(DataProvider):
     provider_id = "world-bank"

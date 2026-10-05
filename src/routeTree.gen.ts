@@ -17,6 +17,8 @@ import { Route as EconomicsRouteImport } from './routes/economics'
 import { Route as EvidenceRouteImport } from './routes/evidence'
 import { Route as FactsRouteImport } from './routes/facts'
 import { Route as LaborRouteImport } from './routes/labor'
+import { Route as LifeDataRouteImport } from './routes/life-data'
+import { Route as LifeEvidenceRouteImport } from './routes/life-evidence'
 import { Route as ProductionRouteImport } from './routes/production'
 import { Route as ReceiptRouteImport } from './routes/receipt'
 import { Route as ResearchRouteImport } from './routes/research'
@@ -68,6 +70,16 @@ const FactsRoute = FactsRouteImport.update({
 const LaborRoute = LaborRouteImport.update({
   id: '/labor',
   path: '/labor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LifeDataRoute = LifeDataRouteImport.update({
+  id: '/life-data',
+  path: '/life-data',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LifeEvidenceRoute = LifeEvidenceRouteImport.update({
+  id: '/life-evidence',
+  path: '/life-evidence',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProductionRoute = ProductionRouteImport.update({
@@ -140,6 +152,8 @@ export interface FileRoutesByFullPath {
   '/evidence': typeof EvidenceRoute
   '/facts': typeof FactsRoute
   '/labor': typeof LaborRoute
+  '/life-data': typeof LifeDataRoute
+  '/life-evidence': typeof LifeEvidenceRoute
   '/production': typeof ProductionRoute
   '/receipt': typeof ReceiptRoute
   '/research': typeof ResearchRoute
@@ -162,6 +176,8 @@ export interface FileRoutesByTo {
   '/evidence': typeof EvidenceRoute
   '/facts': typeof FactsRoute
   '/labor': typeof LaborRoute
+  '/life-data': typeof LifeDataRoute
+  '/life-evidence': typeof LifeEvidenceRoute
   '/production': typeof ProductionRoute
   '/receipt': typeof ReceiptRoute
   '/research': typeof ResearchRoute
@@ -185,6 +201,8 @@ export interface FileRoutesById {
   '/evidence': typeof EvidenceRoute
   '/facts': typeof FactsRoute
   '/labor': typeof LaborRoute
+  '/life-data': typeof LifeDataRoute
+  '/life-evidence': typeof LifeEvidenceRoute
   '/production': typeof ProductionRoute
   '/receipt': typeof ReceiptRoute
   '/research': typeof ResearchRoute
@@ -209,6 +227,8 @@ export interface FileRouteTypes {
     | '/evidence'
     | '/facts'
     | '/labor'
+    | '/life-data'
+    | '/life-evidence'
     | '/production'
     | '/receipt'
     | '/research'
@@ -231,6 +251,8 @@ export interface FileRouteTypes {
     | '/evidence'
     | '/facts'
     | '/labor'
+    | '/life-data'
+    | '/life-evidence'
     | '/production'
     | '/receipt'
     | '/research'
@@ -253,6 +275,8 @@ export interface FileRouteTypes {
     | '/evidence'
     | '/facts'
     | '/labor'
+    | '/life-data'
+    | '/life-evidence'
     | '/production'
     | '/receipt'
     | '/research'
@@ -276,6 +300,8 @@ export interface RootRouteChildren {
   EvidenceRoute: typeof EvidenceRoute
   FactsRoute: typeof FactsRoute
   LaborRoute: typeof LaborRoute
+  LifeDataRoute: typeof LifeDataRoute
+  LifeEvidenceRoute: typeof LifeEvidenceRoute
   ProductionRoute: typeof ProductionRoute
   ReceiptRoute: typeof ReceiptRoute
   ResearchRoute: typeof ResearchRoute
@@ -346,6 +372,20 @@ declare module '@tanstack/react-router' {
       path: '/labor'
       fullPath: '/labor'
       preLoaderRoute: typeof LaborRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/life-data': {
+      id: '/life-data'
+      path: '/life-data'
+      fullPath: '/life-data'
+      preLoaderRoute: typeof LifeDataRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/life-evidence': {
+      id: '/life-evidence'
+      path: '/life-evidence'
+      fullPath: '/life-evidence'
+      preLoaderRoute: typeof LifeEvidenceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/production': {
@@ -444,6 +484,8 @@ const rootRouteChildren: RootRouteChildren = {
   EvidenceRoute: EvidenceRoute,
   FactsRoute: FactsRoute,
   LaborRoute: LaborRoute,
+  LifeDataRoute: LifeDataRoute,
+  LifeEvidenceRoute: LifeEvidenceRoute,
   ProductionRoute: ProductionRoute,
   ReceiptRoute: ReceiptRoute,
   ResearchRoute: ResearchRoute,

@@ -46,9 +46,12 @@ export const getIntegrations = (mode: DataMode, apiUrl: string, hermesUrl: strin
   };
   engines.push(
     prov("ilostat", "ILOSTAT Provider", "Official ILO SDMX web service (free, no key)."),
+    prov("un-wpp", "UN World Population Prospects", "Official UN DESA bulk CSV (free, cached locally)."),
     prov("uae-fcsc", "UAE Official Statistics", "FCSC .Stat — structured file import."),
     prov("india-mospi", "India MoSPI", "PLFS tables — structured CSV import."),
     { name: "Labor Evidence Engine", status: online ? "online" : mode === "local" ? "disabled" : "offline", label: online ? "Online" : mode === "local" ? "Needs backend" : "Offline", description: "Deterministic evidence matching, baselines, gaps (no AI)." },
+    { name: "Life Context Engine", status: online ? "online" : mode === "local" ? "disabled" : "offline", label: online ? "Online" : mode === "local" ? "Needs backend" : "Offline", description: "Life Evidence Matrix, temporal coverage, event relevance, readiness (no AI, no prediction)." },
+    { name: "Life Simulation Engine", status: "not-configured", label: "Not implemented", description: "Phase 6 — will consume pinned evidence snapshots." },
     { name: "Dataset Snapshot Engine", status: online ? "online" : mode === "local" ? "disabled" : "offline", label: online ? "Online" : mode === "local" ? "Needs backend" : "Offline", description: "Immutable, versioned, hash-verified evidence snapshots." },
   );
   return [

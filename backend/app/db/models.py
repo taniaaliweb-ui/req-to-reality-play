@@ -440,6 +440,10 @@ class EvidenceGap(Base):
     auto: Mapped[bool] = mapped_column(Boolean, default=True)
     research_task_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
     created_at: Mapped[str] = mapped_column(String(40))
+    # Phase 5 generalisation (NULL on Phase 4 gaps)
+    domain: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    life_stage: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    target_population: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class HouseholdUnit(Base):
@@ -470,3 +474,174 @@ class IncomeStream(Base):
     fact_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
     notes: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[str] = mapped_column(String(40))
+
+
+# ---------------- Phase 5: life-context evidence ----------------
+
+class LifeObservation(Base):
+    """Normalised population-level evidence for one life domain (demographic, mortality, fertility,
+    migration, education, education_cost, housing, household_expenditure, family_formation,
+    retirement, pension, employment_context). One table, discriminated by `domain`; NULL dimension =
+    the source does not publish it (never invented). A population statistic, never an individual outcome."""
+    __tablename__ = "life_observations"
+    id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    external_observation_id: Mapped[str | None] = mapped_column(ForeignKey("external_observations.id", ondelete="CASCADE"), nullable=True, index=True)
+    domain: Mapped[str] = mapped_column(String(40), index=True)
+    metric: Mapped[str] = mapped_column(String(80), index=True)
+    metric_label: Mapped[str] = mapped_column(Text)
+    value: Mapped[str] = mapped_column(String(60))
+    unit: Mapped[str] = mapped_column(String(120))
+    country: Mapped[str] = mapped_column(String(8), index=True)  # ISO3
+    region: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    geo_level: Mapped[str] = mapped_column(String(12), default="NATIONAL")  # NATIONAL | REGION | CITY
+    year: Mapped[int] = mapped_column(Integer, index=True)
+    age: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    age_group: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    sex: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    education_level: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    urban_rural: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    income_group: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    household_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    housing_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(60), nullable=True)  # expenditure category / cost type
+    origin_country: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    destination_country: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    population_scope: Mapped[str] = mapped_column(Text, default="")
+    observation_type: Mapped[str] = mapped_column(String(20), default="ESTIMATE")  # ESTIMATE | PROJECTION | SURVEY | ADMINISTRATIVE | CENSUS | MANUAL
+    provider: Mapped[str] = mapped_column(String(40), index=True)
+    dataset: Mapped[str] = mapped_column(String(200), default="")
+    source: Mapped[str] = mapped_column(Text, default="")
+    source_organization: Mapped[str] = mapped_column(Text, default="")
+    is_prototype: Mapped[bool] = mapped_column(Boolean, default=False)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[str] = mapped_column(String(40))
+    updated_at: Mapped[str] = mapped_column(String(40))
+
+
+class PolicyEvidence(Base):
+    __tablename__ = "policy_evidence"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    country: Mapped[str] = mapped_column(String(8), index=True)
+    policy_type: Mapped[str] = mapped_column(String(40))  # work-visa | residency | citizenship | family-sponsorship | retirement | pension | labour-law | emigration
+    title: Mapped[str] = mapped_column(Text)
+    effective_start: Mapped[str] = mapped_column(String(10))  # YYYY or YYYY-MM-DD
+    effective_end: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    description: Mapped[str] = mapped_column(Text, default="")
+    source: Mapped[str] = mapped_column(Text, default="")
+    source_organization: Mapped[str] = mapped_column(Text, default="")
+    source_url: Mapped[str] = mapped_column(Text, default="")
+    fact_type: Mapped[str] = mapped_column(String(16), default="FACT")  # FACT | CONTEXT
+    confidence: Mapped[str] = mapped_column(String(10), default="MEDIUM")
+    verification: Mapped[str] = mapped_column(String(20), default="unverified")  # unverified | verified
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[str] = mapped_column(String(40))
+    updated_at: Mapped[str] = mapped_column(String(40))
+
+
+class HistoricalEvent(Base):
+    __tablename__ = "historical_events"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    name: Mapped[str] = mapped_column(Text)
+    category: Mapped[str] = mapped_column(String(40))  # recession | currency-crisis | war | pandemic | oil-shock | financial-crisis | policy-change | migration-event | technology | natural-disaster
+    geography: Mapped[list] = mapped_column(JSON, default=list)  # ISO3 codes, region groups (GCC, SOUTH_ASIA) or WORLD
+    region: Mapped[str | None] = mapped_column(String(200), nullable=True)  # sub-national scope, when the event was regional
+    start_date: Mapped[str] = mapped_column(String(10))
+    end_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    economic_relevance: Mapped[str] = mapped_column(String(10), default="MEDIUM")  # HIGH | MEDIUM | LOW
+    description: Mapped[str] = mapped_column(Text, default="")
+    sources: Mapped[list] = mapped_column(JSON, default=list)  # [{organization, title, url}]
+    verification: Mapped[str] = mapped_column(String(20), default="unverified")
+    created_at: Mapped[str] = mapped_column(String(40))
+    updated_at: Mapped[str] = mapped_column(String(40))
+
+
+class ContextEvidence(Base):
+    """Qualitative social context. NOT a statistical fact unless the source supports a measurable claim."""
+    __tablename__ = "context_evidence"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    topic: Mapped[str] = mapped_column(String(60))
+    country: Mapped[str] = mapped_column(String(8), index=True)
+    region: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    year_start: Mapped[int] = mapped_column(Integer)
+    year_end: Mapped[int] = mapped_column(Integer)
+    population_scope: Mapped[str] = mapped_column(Text, default="")
+    claim: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(Text)
+    source_url: Mapped[str] = mapped_column(Text, default="")
+    evidence_type: Mapped[str] = mapped_column(String(30))  # QUALITATIVE | SURVEY_FINDING | ETHNOGRAPHIC | LEGAL_TEXT | MEASURABLE_CLAIM
+    confidence: Mapped[str] = mapped_column(String(10), default="LOW")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[str] = mapped_column(String(40))
+    updated_at: Mapped[str] = mapped_column(String(40))
+
+
+class Assumption(Base):
+    __tablename__ = "assumptions"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    episode_id: Mapped[str] = mapped_column(EP_FK(), index=True)
+    domain: Mapped[str] = mapped_column(String(40))
+    life_stage: Mapped[str] = mapped_column(String(40))
+    claim: Mapped[str] = mapped_column(Text)
+    value: Mapped[str] = mapped_column(String(120), default="")
+    unit: Mapped[str] = mapped_column(String(120), default="")
+    year_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    year_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reason: Mapped[str] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(String(80), default="user")
+    supporting_evidence: Mapped[list] = mapped_column(JSON, default=list)  # ids of life observations / facts
+    confidence: Mapped[str] = mapped_column(String(10), default="LOW")
+    status: Mapped[str] = mapped_column(String(12), default="active")  # active | retired
+    created_at: Mapped[str] = mapped_column(String(40))
+    updated_at: Mapped[str] = mapped_column(String(40))
+
+
+class LifeStageBaseline(Base):
+    __tablename__ = "life_stage_baselines"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    episode_id: Mapped[str] = mapped_column(EP_FK(), index=True)
+    domain: Mapped[str] = mapped_column(String(40))
+    life_stage: Mapped[str] = mapped_column(String(40))
+    year_start: Mapped[int] = mapped_column(Integer)
+    year_end: Mapped[int] = mapped_column(Integer)
+    country: Mapped[str] = mapped_column(String(8))
+    scope: Mapped[str] = mapped_column(Text, default="")
+    metric: Mapped[str] = mapped_column(String(80), default="")
+    estimate_kind: Mapped[str] = mapped_column(String(12))  # POINT | RANGE | DISTRIBUTION
+    low: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    high: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    point: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    distribution: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    unit: Mapped[str] = mapped_column(String(120), default="")
+    coverage_type: Mapped[str] = mapped_column(String(10))  # DIRECT | NEARBY | DERIVED | ASSUMED
+    coverage: Mapped[list] = mapped_column(JSON, default=list)  # per-year coverage
+    confidence: Mapped[str] = mapped_column(String(20))
+    evidence: Mapped[list] = mapped_column(JSON, default=list)
+    assumption_ids: Mapped[list] = mapped_column(JSON, default=list)
+    reasoning: Mapped[str] = mapped_column(Text, default="")
+    user_approved: Mapped[bool] = mapped_column(Boolean, default=False)
+    approved_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    created_at: Mapped[str] = mapped_column(String(40))
+    updated_at: Mapped[str] = mapped_column(String(40))
+
+
+class MigrationPath(Base):
+    __tablename__ = "migration_paths"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    episode_id: Mapped[str] = mapped_column(EP_FK(), index=True)
+    origin: Mapped[str] = mapped_column(String(8))
+    destination: Mapped[str] = mapped_column(String(8))
+    year_start: Mapped[int] = mapped_column(Integer)
+    year_end: Mapped[int] = mapped_column(Integer)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class SnapshotRecord(Base):
+    """Phase 5 snapshot contents: frozen copies of life evidence, baselines, policies, events,
+    context, assumptions and gaps (immutable once the snapshot is final — DB triggers)."""
+    __tablename__ = "snapshot_records"
+    snapshot_id: Mapped[str] = mapped_column(SNAP_FK(), primary_key=True)
+    record_type: Mapped[str] = mapped_column(String(30), primary_key=True)
+    record_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    payload: Mapped[dict] = mapped_column(JSON)

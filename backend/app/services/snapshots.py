@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.db import models as m
 from app.services import labor
-from app.services.repository import now_iso
+from app.services.repository import get_settings, now_iso
 from app.services.truth import obs_out
 
 
@@ -48,9 +48,66 @@ def _collect(db: Session, episode_id: str) -> tuple[list[tuple], list[tuple], li
     return F, O, B, excluded
 
 
+def _collect_records(db: Session, episode_id: str) -> tuple[list[tuple], set[str]]:
+    """Phase 5 contents: life evidence used by the episode's matrix, life-stage baselines, assumptions,
+    relevant policies/events, qualitative context, migration paths and open gaps."""
+    from app.services import life_context as life
+    R: list[tuple] = []
+    ext: set[str] = set()
+    try:
+        mx = life.life_matrix(db, episode_id, with_detail=False)
+    except LookupError:
+        return R, ext
+    plan = life.stage_plan(db, episode_id)
+    countries = sorted({c for s in plan["stages"] for c in s["countries"]})
+    lo_ids: set[str] = set()
+    for s in mx["stages"]:
+        if not s["applicable"]:
+            continue
+        for c in s["cells"]:
+            srcs = life.MATRIX_SOURCES.get(c["domain"]) or []
+            if not srcs:
+                continue
+            w = c["windowYears"]
+            q = select(m.LifeObservation.id, m.LifeObservation.external_observation_id).where(
+                m.LifeObservation.domain.in_(srcs), m.LifeObservation.country.in_(s["countries"]), m.LifeObservation.is_prototype.is_(False),
+                m.LifeObservation.year >= s["yearStart"] - w, m.LifeObservation.year <= s["yearEnd"] + w)
+            for lid, eid in db.execute(q):
+                lo_ids.add(lid)
+                if eid:
+                    ext.add(eid)
+    for lid in sorted(lo_ids):
+        R.append(("life-observation", lid, life.life_obs_out(db.get(m.LifeObservation, lid))))
+    for b in db.scalars(select(m.LifeStageBaseline).where(m.LifeStageBaseline.episode_id == episode_id)):
+        R.append(("life-baseline", b.id, life.life_baseline_out(b)))
+        ext |= {e["externalObservationId"] for e in b.evidence or [] if e.get("externalObservationId")}
+    for a in db.scalars(select(m.Assumption).where(m.Assumption.episode_id == episode_id)):
+        R.append(("assumption", a.id, life.assumption_out(a)))
+    for p in db.scalars(select(m.PolicyEvidence).where(m.PolicyEvidence.country.in_(countries))):
+        R.append(("policy", p.id, life.policy_out(p)))
+    for e in db.scalars(select(m.HistoricalEvent)):
+        if any(life.event_relevance(e, plan["loc"](y)[0], plan["loc"](y)[1], plan["birthYear"], plan["birthYear"] + 90)["relevance"] != "NOT_RELEVANT"
+               for y in {plan["birthYear"]} | {mv["year"] for mv in plan["moves"]}):
+            R.append(("historical-event", e.id, life.event_out(e)))
+    for c in db.scalars(select(m.ContextEvidence).where(m.ContextEvidence.country.in_(countries))):
+        R.append(("context", c.id, life.context_out(c)))
+    for mp in life.migration_paths(db, episode_id):
+        R.append(("migration-path", mp["id"], {k: v for k, v in mp.items() if k != "observations"} | {"observationIds": [o["id"] for o in mp["observations"]]}))
+    for g in db.scalars(select(m.EvidenceGap).where(m.EvidenceGap.episode_id == episode_id, m.EvidenceGap.status == "open")):
+        R.append(("evidence-gap", g.id, labor.gap_out(g)))
+    R.append(("readiness", "readiness", life.readiness_v2(db, episode_id, list(get_settings(db).get("simulationRequiredDomains") or []))))
+    return R, ext
+
+
 def _write_contents(db: Session, sid: str, episode_id: str):
     F, O, B, excluded = _collect(db, episode_id)
-    for t in (m.SnapshotFact, m.SnapshotObservation, m.SnapshotBaseline):
+    R, ext = _collect_records(db, episode_id)
+    have = {x[0] for x in O}
+    for oid in sorted(ext - have):
+        o = db.get(m.ExternalObservation, oid)
+        if o is not None:
+            O.append((o.id, o.value, o.retrieved_at, {k: v for k, v in obs_out(o).items() if k != "rawMetadata"}))
+    for t in (m.SnapshotFact, m.SnapshotObservation, m.SnapshotBaseline, m.SnapshotRecord):
         for r in db.scalars(select(t).where(t.snapshot_id == sid)):
             db.delete(r)
     db.flush()
@@ -60,6 +117,8 @@ def _write_contents(db: Session, sid: str, episode_id: str):
         db.add(m.SnapshotObservation(snapshot_id=sid, external_observation_id=oid, value=val, retrieved_at=ret, payload=p))
     for bid, p in B:
         db.add(m.SnapshotBaseline(snapshot_id=sid, economic_baseline_id=bid, payload=p))
+    for rtype, rid, p in R:
+        db.add(m.SnapshotRecord(snapshot_id=sid, record_type=rtype, record_id=rid, payload=p))
     snap = db.get(m.EpisodeDatasetSnapshot, sid)
     snap.items = [{"observationId": oid, "value": val, "retrievedAt": ret} for oid, val, ret, _ in O]
     snap.notes = snap.notes  # unchanged
@@ -71,7 +130,36 @@ def content_hash(db: Session, sid: str) -> str:
     O = [(r.external_observation_id, r.value, r.retrieved_at) for r in db.scalars(select(m.SnapshotObservation).where(m.SnapshotObservation.snapshot_id == sid)
                                                                                   .order_by(m.SnapshotObservation.external_observation_id))]
     B = [(r.economic_baseline_id, r.payload) for r in db.scalars(select(m.SnapshotBaseline).where(m.SnapshotBaseline.snapshot_id == sid).order_by(m.SnapshotBaseline.economic_baseline_id))]
-    return hashlib.sha256(json.dumps([F, O, B], sort_keys=True, default=str).encode()).hexdigest()
+    R = [(r.record_type, r.record_id, r.payload) for r in db.scalars(select(m.SnapshotRecord).where(m.SnapshotRecord.snapshot_id == sid)
+                                                                    .order_by(m.SnapshotRecord.record_type, m.SnapshotRecord.record_id))]
+    parts = [F, O, B] + ([R] if R else [])  # Phase 3/4 snapshots (no records) keep their original hash
+    return hashlib.sha256(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def manifest(db: Session, s: m.EpisodeDatasetSnapshot) -> dict:
+    facts = list(db.scalars(select(m.SnapshotFact).where(m.SnapshotFact.snapshot_id == s.id)))
+    obs = list(db.scalars(select(m.SnapshotObservation).where(m.SnapshotObservation.snapshot_id == s.id)))
+    recs = list(db.scalars(select(m.SnapshotRecord).where(m.SnapshotRecord.snapshot_id == s.id)))
+    rc = Counter(r.record_type for r in recs)
+    lo_dom = Counter(r.payload.get("domain") for r in recs if r.record_type == "life-observation")
+    prov = Counter((o.payload or {}).get("provider") or o.external_observation_id.split(":")[0] for o in obs)
+    econ_facts = sum(1 for f in facts if f.payload.get("factType") in ("FACT", "DERIVED") and f.payload.get("currency"))
+    ft = Counter(f.payload.get("factType") for f in facts)
+    readiness = next((r.payload for r in recs if r.record_type == "readiness"), None)
+    lines = [("Economic facts", econ_facts), ("Labor observations", prov.get("ilostat", 0)), ("World Bank observations", prov.get("world-bank", 0)),
+             ("UN WPP observations", prov.get("un-wpp", 0)), ("MoSPI imports", prov.get("india-mospi", 0)), ("UAE official imports", prov.get("uae-fcsc", 0)),
+             ("Manual verified observations", prov.get("manual", 0)),
+             ("Demographic observations", lo_dom.get("demographic", 0) + lo_dom.get("mortality", 0) + lo_dom.get("fertility", 0)),
+             ("Education observations", lo_dom.get("education", 0) + lo_dom.get("education_cost", 0)), ("Housing observations", lo_dom.get("housing", 0)),
+             ("Household expenditure observations", lo_dom.get("household_expenditure", 0)), ("Family-formation observations", lo_dom.get("family_formation", 0)),
+             ("Migration observations", lo_dom.get("migration", 0)), ("Retirement/pension observations", lo_dom.get("retirement", 0) + lo_dom.get("pension", 0)),
+             ("Economic baselines", len(list(db.scalars(select(m.SnapshotBaseline).where(m.SnapshotBaseline.snapshot_id == s.id))))),
+             ("Life-stage baselines", rc.get("life-baseline", 0)), ("Policy evidence", rc.get("policy", 0)), ("Historical events", rc.get("historical-event", 0)),
+             ("Qualitative context records", rc.get("context", 0)), ("Assumptions", rc.get("assumption", 0) + ft.get("ASSUMPTION", 0)),
+             ("Migration paths", rc.get("migration-path", 0)), ("Evidence gaps", rc.get("evidence-gap", 0))]
+    return {"title": s.label, "status": s.status, "contentHash": s.content_hash, "lines": [{"label": a, "count": b} for a, b in lines],
+            "readiness": readiness and {"overall": readiness.get("overall"), "groups": [{"label": g["label"], "status": g["status"]} for g in readiness.get("groups", [])]},
+            "phase5Contents": bool(recs)}
 
 
 def summary(db: Session, s: m.EpisodeDatasetSnapshot) -> dict:
@@ -88,11 +176,14 @@ def summary(db: Session, s: m.EpisodeDatasetSnapshot) -> dict:
             "createdAt": s.created_at, "finalizedAt": s.finalized_at, "contentHash": s.content_hash, "intact": intact,
             "counts": {"facts": len(facts), "verifiedFacts": verified, "assumptions": by_type.get("ASSUMPTION", 0), "derived": by_type.get("DERIVED", 0),
                        "observations": len(obs), "observationsByProvider": dict(by_provider), "baselines": len(bls),
-                       "approvedBaselines": sum(1 for b in bls if b.payload.get("userApproved"))}}
+                       "approvedBaselines": sum(1 for b in bls if b.payload.get("userApproved")),
+                       "records": dict(Counter(r for r in db.scalars(select(m.SnapshotRecord.record_type).where(m.SnapshotRecord.snapshot_id == s.id))))}}
 
 
 def detail(db: Session, s: m.EpisodeDatasetSnapshot) -> dict:
-    return {**summary(db, s),
+    return {**summary(db, s), "manifest": manifest(db, s),
+            "records": [{"type": r.record_type, "id": r.record_id, "payload": r.payload} for r in db.scalars(
+                select(m.SnapshotRecord).where(m.SnapshotRecord.snapshot_id == s.id, m.SnapshotRecord.record_type != "life-observation").order_by(m.SnapshotRecord.record_type))],
             "facts": [r.payload for r in db.scalars(select(m.SnapshotFact).where(m.SnapshotFact.snapshot_id == s.id).order_by(m.SnapshotFact.fact_id))],
             "observations": [{**r.payload, "value": r.value, "retrievedAt": r.retrieved_at} for r in db.scalars(
                 select(m.SnapshotObservation).where(m.SnapshotObservation.snapshot_id == s.id).order_by(m.SnapshotObservation.external_observation_id))],
@@ -158,7 +249,12 @@ def diff(db: Session, a: m.EpisodeDatasetSnapshot, b: m.EpisodeDatasetSnapshot) 
         return out
 
     rng = lambda p: p.get("point") or f"{p.get('low')}–{p.get('high')}"  # noqa: E731
+    def rec(d):
+        return [{"id": f"{r['type']}:{r['id']}", **r} for r in d["records"] if r["type"] not in ("readiness",)]
+
     return {"from": summary(db, a), "to": summary(db, b),
+            "records": cmp(rec(da), rec(dbb), "id", lambda r: json.dumps(r["payload"], sort_keys=True, default=str)[:4000],
+                           lambda r: f"{r['type']} · {r['payload'].get('name') or r['payload'].get('title') or r['payload'].get('claim') or r['id']}"),
             "observations": cmp(da["observations"], dbb["observations"], "id", lambda o: o["value"], lambda o: f"{o.get('countryCode')} {o.get('year')} {o.get('indicatorName') or o.get('indicatorCode')}"),
             "facts": cmp(da["facts"], dbb["facts"], "id", lambda f: f["value"], lambda f: f["metric"]),
             "baselines": cmp(da["baselines"], dbb["baselines"], "id", lambda p: f"{rng(p)} {p.get('currency')}/{(p.get('payPeriod') or '').lower()} · {p.get('baselineType')}",

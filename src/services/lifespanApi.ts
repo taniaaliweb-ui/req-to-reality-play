@@ -5,7 +5,7 @@
 //   VITE_LIFESPAN_DATA_MODE=local     -> LocalLifespanApi, browser storage (prototype/debug; default)
 //   VITE_LIFESPAN_API_URL=http://127.0.0.1:8000
 // In backend mode there is NO silent fallback to browser storage.
-import type { AuditResult, BaselineInput, CandidateResult, DatasetSnapshot, EconomicBaseline, EconomicProfile, EconomicProfileInput, EngineResult, EvidenceGap, ExternalObservation, Household, ImportPreview, LifespanDB, LineageNode, ProviderInfo, Readiness, SnapshotDiff, SyncReport, VerifiedEconomics, WageDistribution, WageObservation } from "@/types/lifespan";
+import type { AssumptionInput, AssumptionRecord, ContextRec, HistoricalEventRec, LifeImportPreview, LifeMatrix, LifeObservation, LifeObsSummary, MatrixCell, MatrixStage, MigrationPathEvidence, PolicyRec, ReadinessV2, SnapshotManifest, AuditResult, BaselineInput, CandidateResult, DatasetSnapshot, EconomicBaseline, EconomicProfile, EconomicProfileInput, EngineResult, EvidenceGap, ExternalObservation, Household, ImportPreview, LifespanDB, LineageNode, ProviderInfo, Readiness, SnapshotDiff, SyncReport, VerifiedEconomics, WageDistribution, WageObservation } from "@/types/lifespan";
 import { buildDemoDB } from "@/mock/demoEpisode";
 import { diffWorkspace, type SyncOp } from "./sync";
 
@@ -36,6 +36,35 @@ export interface LifespanApi {
   importWorkspace(db: LifespanDB, overwrite: boolean): Promise<ImportReport>;
   truth: TruthApi;
   labor: LaborApi;
+  life: LifeApi;
+}
+
+/** Life-context evidence (Phase 5). Backend only. */
+export interface LifeApi {
+  syncUnWpp(req: { countries: string[]; yearStart: number; yearEnd: number; indicators?: string[] }): Promise<SyncReport & { projections: number; lifeObservations: number }>;
+  observations(filter?: Record<string, string | number | undefined>): Promise<LifeObservation[]>;
+  summary(): Promise<LifeObsSummary[]>;
+  importPreview(provider: ImportProvider, csv: string): Promise<LifeImportPreview>;
+  importCommit(provider: ImportProvider, csv: string): Promise<LifeImportPreview>;
+  matrix(episodeId: string): Promise<LifeMatrix>;
+  cell(episodeId: string, stage: string, domain: string): Promise<{ stage: Omit<MatrixStage, "cells">; cell: MatrixCell }>;
+  readiness(episodeId: string): Promise<ReadinessV2>;
+  detectGaps(episodeId: string): Promise<EvidenceGap[]>;
+  assumptions(episodeId: string): Promise<AssumptionRecord[]>;
+  createAssumption(episodeId: string, a: AssumptionInput): Promise<AssumptionRecord>;
+  retireAssumption(id: string): Promise<AssumptionRecord>;
+  events(): Promise<HistoricalEventRec[]>;
+  episodeEvents(episodeId: string): Promise<{ events: HistoricalEventRec[]; note: string }>;
+  verifyEvent(id: string, verified: boolean): Promise<HistoricalEventRec>;
+  createEvent(e: Record<string, unknown>): Promise<HistoricalEventRec>;
+  policies(): Promise<PolicyRec[]>;
+  createPolicy(p: Record<string, unknown>): Promise<PolicyRec>;
+  verifyPolicy(id: string, verified: boolean): Promise<PolicyRec>;
+  context(): Promise<ContextRec[]>;
+  createContext(c: Record<string, unknown>): Promise<ContextRec>;
+  deleteContext(id: string): Promise<void>;
+  migrationPaths(episodeId: string): Promise<MigrationPathEvidence[]>;
+  snapshotManifest(snapshotId: string): Promise<SnapshotManifest>;
 }
 
 export type ImportProvider = "manual" | "india-mospi" | "uae-fcsc";
@@ -96,6 +125,7 @@ const LOCAL_TRUTH: TruthApi = {
   inflationAdjust: backendOnly, currencyConvert: backendOnly, lineage: backendOnly, verifiedEconomics: backendOnly, pinSnapshot: backendOnly,
 };
 const LOCAL_LABOR = new Proxy({}, { get: () => backendOnly }) as LaborApi;
+const LOCAL_LIFE = new Proxy({}, { get: () => backendOnly }) as LifeApi;
 
 /** Thrown when the backend cannot be reached at all. */
 export class BackendUnavailableError extends Error {
@@ -117,6 +147,7 @@ export class LocalLifespanApi implements LifespanApi {
   readonly mode = "local" as const;
   readonly truth = LOCAL_TRUTH;
   readonly labor = LOCAL_LABOR;
+  readonly life = LOCAL_LIFE;
 
   async load(): Promise<LifespanDB> {
     return readLocalWorkspace() ?? buildDemoDB();
@@ -158,6 +189,7 @@ export class HttpLifespanApi implements LifespanApi {
   readonly mode = "backend" as const;
   readonly truth: TruthApi;
   readonly labor: LaborApi;
+  readonly life: LifeApi;
   constructor(private baseUrl: string) {
     const enc = encodeURIComponent;
     const qs = (f: Record<string, string | number | undefined> = {}) => {
@@ -196,6 +228,32 @@ export class HttpLifespanApi implements LifespanApi {
       deleteSnapshot: (id) => this.req("DELETE", `/snapshots/${enc(id)}`),
       snapshotDetail: (id) => this.req("GET", `/snapshots/${enc(id)}`),
       diffSnapshots: (a, b) => this.req("GET", `/snapshots/diff${qs({ a, b })}`),
+    };
+    this.life = {
+      syncUnWpp: (req) => this.req("POST", "/data/un-wpp/sync", req),
+      observations: (f) => this.req("GET", `/life/observations${qs(f)}`),
+      summary: () => this.req("GET", "/life/observations/summary"),
+      importPreview: (provider, csv) => this.req("POST", "/life/import/preview", { provider, csv }),
+      importCommit: (provider, csv) => this.req("POST", "/life/import/commit", { provider, csv }),
+      matrix: (eid) => this.req("GET", `/episodes/${enc(eid)}/life/matrix`),
+      cell: (eid, st, d) => this.req("GET", `/episodes/${enc(eid)}/life/matrix/${enc(st)}/${enc(d)}`),
+      readiness: (eid) => this.req("GET", `/episodes/${enc(eid)}/life/readiness`),
+      detectGaps: (eid) => this.req("POST", `/episodes/${enc(eid)}/life/gaps/detect`),
+      assumptions: (eid) => this.req("GET", `/episodes/${enc(eid)}/assumptions`),
+      createAssumption: (eid, a) => this.req("POST", `/episodes/${enc(eid)}/assumptions`, a),
+      retireAssumption: (id) => this.req("POST", `/assumptions/${enc(id)}/retire`),
+      events: () => this.req("GET", "/life/events"),
+      episodeEvents: (eid) => this.req("GET", `/episodes/${enc(eid)}/life/events`),
+      verifyEvent: (id, v) => this.req("POST", `/life/events/${enc(id)}/verify?verified=${v}`),
+      createEvent: (e) => this.req("POST", "/life/events", e),
+      policies: () => this.req("GET", "/life/policies"),
+      createPolicy: (p) => this.req("POST", "/life/policies", p),
+      verifyPolicy: (id, v) => this.req("POST", `/life/policies/${enc(id)}/verify?verified=${v}`),
+      context: () => this.req("GET", "/life/context"),
+      createContext: (c) => this.req("POST", "/life/context", c),
+      deleteContext: (id) => this.req("DELETE", `/life/context/${enc(id)}`),
+      migrationPaths: (eid) => this.req("GET", `/episodes/${enc(eid)}/life/migration-paths`),
+      snapshotManifest: async (id) => (await this.req<{ manifest: SnapshotManifest }>("GET", `/snapshots/${enc(id)}`)).manifest,
     };
     this.truth = {
       providers: (check = false) => this.req("GET", `/data/providers${check ? "?check=true" : ""}`),

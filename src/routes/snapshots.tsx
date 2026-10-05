@@ -4,7 +4,7 @@ import { Lock, Plus } from "lucide-react";
 import { useLifespan } from "@/hooks/useLifespan";
 import { EmptyEpisode, Field, PageHeader } from "@/components/lifespan/primitives";
 import { ApiError, lifespanApi } from "@/services/lifespanApi";
-import type { DatasetSnapshot, SnapshotDiff } from "@/types/lifespan";
+import type { DatasetSnapshot, SnapshotDiff, SnapshotManifest } from "@/types/lifespan";
 import { cn } from "@/lib/utils";
 import { pageHead } from "@/lib/seo";
 
@@ -23,6 +23,7 @@ function Snapshots() {
   const [error, setError] = useState<string | null>(null);
   const [cmp, setCmp] = useState<{ a: string; b: string }>({ a: "", b: "" });
   const [diff, setDiff] = useState<SnapshotDiff | null>(null);
+  const [manifest, setManifest] = useState<SnapshotManifest | null>(null);
   const eid = active?.id;
 
   const refresh = useCallback(async () => {
@@ -70,6 +71,7 @@ function Snapshots() {
                 <td className="data">{s.createdAt.slice(0, 19)}{s.finalizedAt && <div>final {s.finalizedAt.slice(0, 19)}</div>}</td>
                 <td>{s.status !== "final" ? "—" : s.intact === null ? "legacy (unhashed)" : s.intact ? <span className="text-pass">hash verified</span> : <span className="text-fail">MODIFIED</span>}</td>
                 <td className="whitespace-nowrap">
+                  <button className="btn-ghost text-xs" onClick={() => void run(async () => setManifest(await lifespanApi.life.snapshotManifest(s.id)))}>Manifest</button>
                   {s.status === "draft" ? (
                     <>
                       <button className="btn-ghost text-xs" onClick={() => void run(() => api.refreshSnapshot(s.id))}>Re-collect</button>
@@ -86,6 +88,17 @@ function Snapshots() {
           </tbody>
         </table>
       </section>
+
+      {manifest && (
+        <section className="panel mb-6 p-4">
+          <div className="mb-2 flex items-center gap-2"><h3 className="text-base">Manifest · {manifest.title}</h3>{manifest.status === "final" ? <span className="chip border-pass text-pass"><Lock className="h-3 w-3" /> IMMUTABLE</span> : <span className="chip border-warn text-warn">draft</span>}
+            <button className="btn-ghost ml-auto text-xs" onClick={() => setManifest(null)}>Close</button></div>
+          <div className="grid grid-cols-3 gap-x-6 gap-y-0.5 text-xs">{manifest.lines.map((l) => <div key={l.label} className="flex justify-between border-b border-border py-0.5"><span>{l.label}</span><span className="data">{l.count}</span></div>)}</div>
+          {manifest.readiness && <p className="mt-2 text-xs">Readiness at snapshot time: <span className="font-semibold">{manifest.readiness.overall.replace("_", " ")}</span> — {manifest.readiness.groups.map((g) => `${g.label.replace(" readiness", "")}: ${g.status.replace("_", " ")}`).join(" · ")}</p>}
+          {!manifest.phase5Contents && <p className="mt-2 text-xs text-muted-foreground">Created before Phase 5 — contains no life-context records.</p>}
+          {manifest.contentHash && <p className="data mt-1 text-[10px] text-muted-foreground">sha256 {manifest.contentHash}</p>}
+        </section>
+      )}
 
       <section className="panel">
         <div className="panel-header gap-2">
