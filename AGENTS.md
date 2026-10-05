@@ -14,6 +14,9 @@
 - In backend mode the FastAPI+SQLite backend (`backend/`) is canonical; never fall back to browser storage silently — avoids two sources of truth.
 - Frontend persists by diffing workspace states into REST upserts/deletes (`src/services/sync.ts`) — pages keep their mutate() model.
 - Backend schema changes go through Alembic migrations in `backend/migrations/` — the user's local DB must upgrade in place.
+- External statistics are fetched only by backend providers (`backend/app/providers/`) behind the DataProvider interface and stored raw in `external_observations` before becoming facts — keeps every number traceable and offline-capable.
+- Economic math lives only in `backend/app/services/economic_engine.py` (pure, Decimal, versioned formulas); every saved result gets a `derived_calculations` row plus `calculation_inputs` — results must stay reproducible after formulas change.
+- Never invent, interpolate or substitute missing statistics; return MISSING_DATA — trust over completeness.
 - Canonical audit rules live in `backend/app/domain/audit.py`; keep `src/features/audit/rules.ts` in sync for local mode.
 - AI access only via `src/services/aiProvider.ts`; never fabricate AI output — no provider coupling in UI.
 - Simulation, economics, audit and receipt logic live in `src/features/*` as pure functions, never inside components.

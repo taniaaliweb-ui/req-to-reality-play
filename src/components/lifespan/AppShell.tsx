@@ -2,7 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import {
   LayoutDashboard, BookOpen, Search, Table2, Library, GitBranch, PenLine, ShieldCheck, Clapperboard, Settings,
-  Activity, Cpu, CalendarRange, Wallet, Receipt,
+  Activity, Cpu, Database, CalendarRange, Wallet, Receipt,
 } from "lucide-react";
 import { useLifespan } from "@/hooks/useLifespan";
 import { STAGE_LABELS, WORKFLOW_STAGES } from "@/types/lifespan";
@@ -48,6 +48,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="border-t border-sidebar-border px-2 py-3">
           <Link to="/status" className={cn("flex items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-[13px] text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground", path.startsWith("/status") && "bg-sidebar-accent text-sidebar-foreground")}>
             <Activity className="h-4 w-4" /> System Status
+          </Link>
+          <Link to="/data" className={cn("flex items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-[13px] text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground", path.startsWith("/data") && "bg-sidebar-accent text-sidebar-foreground")}>
+            <Database className="h-4 w-4" /> Data Sources
           </Link>
           <div className="mt-2 flex items-center gap-2 px-2.5 text-[11px] text-sidebar-muted">
             <Cpu className="h-3.5 w-3.5" />

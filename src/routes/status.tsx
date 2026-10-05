@@ -7,6 +7,7 @@ import { API_URL, lifespanApi, type HealthStatus } from "@/services/lifespanApi"
 import { aiProvider } from "@/services/aiProvider";
 import { cn } from "@/lib/utils";
 import { pageHead } from "@/lib/seo";
+import type { ProviderInfo } from "@/types/lifespan";
 
 export const Route = createFileRoute("/status")({
   head: pageHead("System Status", "Honest connection status for backend, database, AI workers, Hermes and MCP."),
@@ -16,17 +17,23 @@ export const Route = createFileRoute("/status")({
 function Status() {
   const { db, mode } = useLifespan();
   const [health, setHealth] = useState<HealthStatus | null>(null);
+  const [providers, setProviders] = useState<ProviderInfo[] | null>(null);
   useEffect(() => {
     let alive = true;
-    const check = () => lifespanApi.health().then((h) => alive && setHealth(h));
+    const check = () =>
+      lifespanApi.health().then((h) => {
+        if (!alive) return;
+        setHealth(h);
+        if (h.online) lifespanApi.truth.providers(true).then((p) => alive && setProviders(p)).catch(() => alive && setProviders([]));
+      });
     void check();
-    const t = setInterval(check, 10000);
+    const t = setInterval(check, 30000);
     return () => {
       alive = false;
       clearInterval(t);
     };
   }, []);
-  const items = getIntegrations(mode, API_URL, db.settings.hermesUrl, health);
+  const items = getIntegrations(mode, API_URL, db.settings.hermesUrl, health, providers);
   return (
     <>
       <PageHeader eyebrow="System" title="System Status" description="Checked live against the backend health endpoint. Future systems are never marked online." />

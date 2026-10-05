@@ -104,3 +104,14 @@ def test_live_smoke():
     res = WorldBankProvider().fetch_series("PA.NUS.FCRF", ["IN"], 2010, 2010)
     assert res.observations and res.observations[0].value > 0
     json.dumps(res.observations[0].raw)
+
+
+def test_date_range_colon_not_percent_encoded():
+    """The live API answers HTTP 502 to date=1990%3A2025; the colon must be sent raw."""
+    seen = []
+
+    def h(req):
+        seen.append(req.url.raw_path.decode())
+        return httpx.Response(200, json=_wb([_row(2000, 1.0)]))
+    provider(h).fetch_series("FP.CPI.TOTL", ["IN"], 2000, 2000)
+    assert any("date=2000:2000" in p for p in seen) and not any("%3A" in p for p in seen)
