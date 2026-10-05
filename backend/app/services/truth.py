@@ -34,7 +34,7 @@ def store_observations(db: Session, observations: list[Observation]) -> dict:
     ts = now_iso()
     created = unchanged = revised = 0
     for o in observations:
-        oid = obs_id(o.provider, o.indicator_code, o.country_code, o.year)
+        oid = o.obs_key or obs_id(o.provider, o.indicator_code, o.country_code, o.year)
         row = db.get(m.ExternalObservation, oid)
         val = str(o.value)
         if row is None:
@@ -80,21 +80,27 @@ def find_obs(db: Session, indicator: str, country: str, year: int, provider: str
 
 
 # ---------- sources + facts ----------
+PROVIDER_SOURCES = {
+    "world-bank": dict(id="SRC-WB-WDI", title="World Development Indicators (World Bank)", organization="World Bank", url="https://data.worldbank.org/",
+                       geo="Global", time="1960–present", type="World Bank", reliability="Primary",
+                       notes="Retrieved via the World Bank Indicators API v2. Underlying series compiled by the World Bank from national statistical agencies and the IMF; see each observation's source note."),
+    "ilostat": dict(id="SRC-ILOSTAT", title="ILOSTAT (International Labour Organization)", organization="International Labour Organization", url="https://ilostat.ilo.org/",
+                    geo="Global", time="varies by country", type="UN", reliability="Primary",
+                    notes="Retrieved via the official ILO SDMX web service. Values are compiled by the ILO from national labour force and household surveys; the survey used is recorded on each observation."),
+}
+
+
 def ensure_source(db: Session, o: m.ExternalObservation) -> str:
-    sid = SOURCE_IDS.get(o.provider) or "SRC-" + hashlib.sha1(f"{o.provider}|{o.dataset}|{o.source_organization}".encode()).hexdigest()[:10]
+    known = PROVIDER_SOURCES.get(o.provider)
+    sid = known["id"] if known else "SRC-" + hashlib.sha1(f"{o.provider}|{o.dataset}|{o.source_organization}".encode()).hexdigest()[:10]
     if db.get(m.Source, sid) is None:
         ts = now_iso()
-        wb = o.provider == "world-bank"
-        db.add(m.Source(
-            id=sid, created_at=ts, updated_at=ts,
-            title=f"{o.dataset} ({'World Bank' if wb else o.source_organization})",
-            organization="World Bank" if wb else o.source_organization,
-            url="https://data.worldbank.org/" if wb else o.source_url,
-            publication_date="", accessed_date=o.retrieved_at[:10], geo_coverage="Global" if wb else o.country_name,
-            time_coverage="1960–present" if wb else str(o.year), type="World Bank" if wb else "other",
-            reliability="Primary" if wb else "Moderate",
-            notes=("Retrieved via the World Bank Indicators API v2. Underlying series compiled by the World Bank from "
-                   "national statistical agencies and the IMF; see each observation's source note.") if wb else "Manually entered from the named source."))
+        k = known or dict(title=f"{o.dataset} ({o.source_organization})", organization=o.source_organization, url=o.source_url, geo=o.country_name,
+                          time=str(o.year), type="statistical agency" if o.provider in ("uae-fcsc", "india-mospi") else "other",
+                          reliability="Strong" if o.provider in ("uae-fcsc", "india-mospi") else "Moderate",
+                          notes="Imported from a structured file of the named official source." if o.provider != "manual" else "Manually entered from the named source.")
+        db.add(m.Source(id=sid, created_at=ts, updated_at=ts, title=k["title"], organization=k["organization"], url=k["url"], publication_date="",
+                        accessed_date=o.retrieved_at[:10], geo_coverage=k["geo"], time_coverage=k["time"], type=k["type"], reliability=k["reliability"], notes=k["notes"]))
         db.flush()
     return sid
 
@@ -106,13 +112,16 @@ def fact_for_observation(db: Session, episode_id: str, o: m.ExternalObservation)
     sid = ensure_source(db, o)
     ts = now_iso()
     kind = "FX" if o.indicator_code == FX else "CPI" if o.indicator_code == CPI else o.indicator_code
+    labour = o.provider != "world-bank"
     note = (f"National {o.indicator_name} as published. High confidence applies to the national statistic itself — "
             f"not to the price changes experienced by any specific household, region or income group. "
-            f"Retrieved {o.retrieved_at}." + (" Annual period average, not a daily rate." if o.indicator_code == FX else ""))
+            f"Retrieved {o.retrieved_at}." + (" Annual period average, not a daily rate." if o.indicator_code == FX else "")) if not labour else (
+            f"Published statistic for the population described in the metric (source: {o.source_note[:300]}). "
+            f"It describes that population, not any individual character. Retrieved {o.retrieved_at}.")
     fields = dict(
-        episode_id=episode_id, category="Economy", metric=f"{o.country_name} {o.indicator_name}", value=o.value, unit=o.unit,
-        country=o.country_name, region="National", year_start=o.year, year_end=o.year, source_id=sid, confidence="high",
-        fact_type="FACT", derived_from=None, notes=note, status="verified", currency=None, external_observation_id=o.id,
+        episode_id=episode_id, category="Employment" if labour else "Economy", metric=(f"{o.country_name} {o.year}: {o.indicator_name}" if labour else f"{o.country_name} {o.indicator_name}"), value=o.value, unit=o.unit,
+        country=o.country_name, region=((o.raw_metadata or {}).get("region") or "National"), year_start=o.year, year_end=o.year, source_id=sid, confidence="high",
+        fact_type="FACT", derived_from=None, notes=note, status="verified", currency=(o.raw_metadata or {}).get("currency"), external_observation_id=o.id,
         provider=o.provider, dataset=o.dataset, indicator_code=o.indicator_code, is_prototype=False,
     )
     if row is None:
@@ -271,16 +280,11 @@ def verified_economics(db: Session, episode_id: str, base_year: int) -> dict:
 
 # ---------- dataset snapshots ----------
 def pin_snapshot(db: Session, episode_id: str, label: str) -> dict:
-    facts = db.scalars(select(m.Fact).where(m.Fact.episode_id == episode_id, m.Fact.external_observation_id.is_not(None)))
-    items = []
-    for f in facts:
-        o = db.get(m.ExternalObservation, f.external_observation_id)
-        if o:
-            items.append({"observationId": o.id, "factId": f.id, "value": o.value, "retrievedAt": o.retrieved_at, "providerLastUpdated": o.provider_last_updated})
-    snap = m.EpisodeDatasetSnapshot(id="SNAP-" + uuid.uuid4().hex[:10], episode_id=episode_id, label=label, created_at=now_iso(), items=items)
-    db.add(snap)
-    db.commit()
-    return {"id": snap.id, "episodeId": episode_id, "label": label, "createdAt": snap.created_at, "items": items}
+    """Phase 3 endpoint kept for compatibility: creates and immediately finalizes a Phase 4 snapshot."""
+    from app.services import snapshots
+    snap = snapshots.create(db, episode_id, label)
+    snapshots.finalize(db, snap)
+    return {"id": snap.id, "episodeId": episode_id, "label": snap.label, "createdAt": snap.created_at, "items": snap.items}
 
 
 __all__ = ["ProviderError"]

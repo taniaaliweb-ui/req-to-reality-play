@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routers import data, resources, system
+from app.api.routers import data, labor, resources, system
 from app.core.config import API_PREFIX, CORS_ORIGIN_REGEX, SEED_DEMO
 from app.db.database import SessionLocal, ping
 from app.db.migrate import upgrade_to_head
@@ -51,3 +51,4 @@ async def unhandled(_: Request, exc: Exception):
 app.include_router(system.router, prefix=API_PREFIX)
 app.include_router(resources.router, prefix=API_PREFIX)
 app.include_router(data.router, prefix=API_PREFIX)
+app.include_router(labor.router, prefix=API_PREFIX)

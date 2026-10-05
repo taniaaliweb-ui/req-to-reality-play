@@ -97,12 +97,35 @@ def list_providers(db: DB, check: bool = False):
         status, detail = ("available", "API reachable") if ok else ("offline" if kind in ("network", "timeout") else "error", kind)
     else:
         status, detail = (("error" if last.status == "error" else "available"), last.summary.get("error", "")) if last else ("unknown", "Not checked")
-    return [
-        {**wb.describe(), "status": status, "detail": detail, "enabled": enabled, "storedObservations": n_obs,
+    out = [
+        {**wb.describe(), "mode": "LIVE_API", "status": status, "detail": detail, "enabled": enabled, "storedObservations": n_obs,
          "lastSync": {"at": last.finished_at, "status": last.status, "summary": last.summary} if last else None},
-        {**providers.manual_provider.describe(), "status": "available", "detail": "Values entered with a named source.", "enabled": True,
-         "storedObservations": db.scalar(select(func.count()).select_from(m.ExternalObservation).where(m.ExternalObservation.provider == "manual")) or 0, "lastSync": None},
     ]
+    # ILOSTAT (live SDMX API)
+    ilo = providers.get_ilostat()
+    il_last = db.scalar(select(m.ProviderSync).where(m.ProviderSync.provider == "ilostat").order_by(m.ProviderSync.started_at.desc()))
+    il_n = db.scalar(select(func.count()).select_from(m.ExternalObservation).where(m.ExternalObservation.provider == "ilostat")) or 0
+    il_en = st["externalDataEnabled"] and st.get("ilostatEnabled", True)
+    if not il_en:
+        il_status, il_detail = "disabled", "Disabled in Settings."
+    elif check:
+        ok, kind = ilo.ping()
+        il_status, il_detail = ("available", "SDMX API reachable") if ok else ("offline" if kind in ("network", "timeout") else "error", kind)
+    else:
+        il_status, il_detail = (("error" if il_last.status == "error" else "available"), il_last.summary.get("error", "")) if il_last else ("unknown", "Not checked")
+    out.append({**ilo.describe(), "status": il_status, "detail": il_detail, "enabled": il_en, "storedObservations": il_n,
+                "lastSync": {"at": il_last.finished_at, "status": il_last.status, "summary": il_last.summary} if il_last else None})
+    for p in (providers.uae_provider, providers.india_provider):
+        n = db.scalar(select(func.count()).select_from(m.ExternalObservation).where(m.ExternalObservation.provider == p.provider_id)) or 0
+        live = None
+        if check and p.ping_url and st["externalDataEnabled"] and st.get("uaeStatEnabled", True):
+            ok, kind = p.ping()
+            live = "reachable" if ok else kind
+        detail_txt = ("File import of official tables (CSV). " + (f"Live API check: {live}." if live else "No verified live API — structured import only."))
+        out.append({**p.describe(), "status": "import", "detail": detail_txt, "enabled": True, "storedObservations": n, "lastSync": None, "liveApi": live})
+    out.append({**providers.manual_provider.describe(), "mode": "MANUAL", "status": "available", "detail": "Values entered with a named source.", "enabled": True,
+                "storedObservations": db.scalar(select(func.count()).select_from(m.ExternalObservation).where(m.ExternalObservation.provider == "manual")) or 0, "lastSync": None})
+    return out
 
 
 @router.post("/data/world-bank/sync")

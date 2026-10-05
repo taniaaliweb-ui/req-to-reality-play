@@ -41,6 +41,7 @@ class Observation:
     source_url: str = ""
     provider_last_updated: str = ""
     raw: dict = field(default_factory=dict)
+    obs_key: str | None = None  # explicit id for multi-dimensional series (labour data); default provider:indicator:country:year
 
 
 @dataclass

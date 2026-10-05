@@ -12,6 +12,7 @@ from decimal import ROUND_HALF_EVEN, Context, Decimal, InvalidOperation
 ENGINE_VERSION = "1.0"
 INFLATION_FORMULA = "inflation-adjust-v1"
 FX_FORMULA = "fx-usd-bridge-annual-avg-v1"
+ANNUALIZE_FORMULA = "wage-annualize-v1"
 CTX = Context(prec=28)
 
 
@@ -125,6 +126,45 @@ def calculate_real_income(nominal_income, income_year: int, base_year: int, cpi_
     return r
 
 
+ANNUALIZE_REQUIRES = {"MONTHLY": ("monthsPerYear",), "WEEKLY": ("weeksPerYear",), "DAILY": ("daysPerYear",), "HOURLY": ("hoursPerWeek", "weeksPerYear"), "ANNUAL": ()}
+
+
+def annualize_wage(amount, pay_period: str, assumptions: dict) -> EngineResult:
+    """annual = amount × explicit working-time assumptions. Nothing is assumed silently
+    (no default 12 months, 40 hours or 52 weeks): each factor must be supplied and is recorded."""
+    pp = (pay_period or "").upper()
+    need = ANNUALIZE_REQUIRES.get(pp)
+    r = EngineResult("OK", "wage-annualize", f"amount × {' × '.join(need) if need else '1'}", ANNUALIZE_FORMULA,
+                     parameters={"amount": str(amount), "payPeriod": pp, "assumptions": dict(assumptions)},
+                     labels=["Gross/net status unchanged by annualization", "Working-time factors are explicit assumptions"])
+    if need is None:
+        r.status, r.errors = "INVALID_INPUT", [f"Unknown pay period {pay_period!r}"]
+        return r
+    try:
+        value = D(amount)
+        factors = []
+        for k in need:
+            if assumptions.get(k) in (None, ""):
+                r.missing.append(f"Assumption '{k}' is required to annualize a {pp.lower()} wage")
+                continue
+            f = D(assumptions[k])
+            if f <= 0:
+                raise ValueError(f"{k} must be positive")
+            factors.append(f)
+    except ValueError as e:
+        r.status, r.errors = "INVALID_INPUT", [str(e)]
+        return r
+    if r.missing:
+        r.status = "MISSING_DATA"
+        return r
+    out = value
+    for f in factors:
+        out = CTX.multiply(out, f)
+    r.result, r.display = str(out), display(out)
+    r.inputs = [{"role": k, "value": str(assumptions[k]), "kind": "assumption"} for k in need]
+    return r
+
+
 def recompute(calculation_type: str, parameters: dict, inputs: dict[str, str]) -> EngineResult:
     """Re-run a stored calculation from its stored parameters + input values (reproducibility check)."""
     if calculation_type in ("inflation-adjust", "real-income"):
@@ -133,4 +173,6 @@ def recompute(calculation_type: str, parameters: dict, inputs: dict[str, str]) -
     if calculation_type == "currency-convert":
         return convert_historical_currency(inputs["nominal_amount"], parameters["year"], parameters["sourceCurrency"], parameters["targetCurrency"],
                                            inputs.get("source_fx"), inputs.get("target_fx"))
+    if calculation_type == "wage-annualize":
+        return annualize_wage(parameters["amount"], parameters["payPeriod"], parameters.get("assumptions", {}))
     raise ValueError(f"unknown calculation type {calculation_type}")

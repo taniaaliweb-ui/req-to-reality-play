@@ -211,6 +211,8 @@ class SettingsIn(Schema):
     currency_display: Literal["local", "USD"] = "local"
     external_data_enabled: bool = True
     world_bank_enabled: bool = True
+    ilostat_enabled: bool = True
+    uae_stat_enabled: bool = True
 
 
 class AuditOut(Schema):
