@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routers import resources, system
+from app.api.routers import data, resources, system
 from app.core.config import API_PREFIX, CORS_ORIGIN_REGEX, SEED_DEMO
 from app.db.database import SessionLocal, ping
 from app.db.migrate import upgrade_to_head
@@ -30,7 +30,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="LifeSpan Backend", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="LifeSpan Backend", version="0.3.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origin_regex=CORS_ORIGIN_REGEX, allow_methods=["*"], allow_headers=["*"])
 
 
@@ -50,3 +50,4 @@ async def unhandled(_: Request, exc: Exception):
 
 app.include_router(system.router, prefix=API_PREFIX)
 app.include_router(resources.router, prefix=API_PREFIX)
+app.include_router(data.router, prefix=API_PREFIX)

@@ -131,7 +131,7 @@ def upgrade():
     sa.Column('fact_id', sa.String(length=80), nullable=False),
     sa.Column('role', sa.String(length=40), nullable=False),
     sa.ForeignKeyConstraint(['calculation_id'], ['derived_calculations.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['fact_id'], ['facts.id'], ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['fact_id'], ['facts.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('calculation_id', 'fact_id', 'role')
     )
     with op.batch_alter_table('facts', schema=None) as batch_op:

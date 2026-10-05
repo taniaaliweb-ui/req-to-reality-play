@@ -246,7 +246,7 @@ class DerivedCalculation(Base):
 class CalculationInput(Base):
     __tablename__ = "calculation_inputs"
     calculation_id: Mapped[str] = mapped_column(ForeignKey("derived_calculations.id", ondelete="CASCADE"), primary_key=True)
-    fact_id: Mapped[str] = mapped_column(ForeignKey("facts.id", ondelete="RESTRICT"), primary_key=True)
+    fact_id: Mapped[str] = mapped_column(ForeignKey("facts.id", ondelete="CASCADE"), primary_key=True)
     role: Mapped[str] = mapped_column(String(40), primary_key=True)
 
 

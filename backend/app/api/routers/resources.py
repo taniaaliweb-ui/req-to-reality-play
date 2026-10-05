@@ -143,6 +143,11 @@ def _register_scoped(res: repo.Resource) -> None:
         obj = _validate(res.schema, {**payload, "id": rid, "episodeId": eid})
         if res.collection == "facts" and obj.source_id and db.get(m.Source, obj.source_id) is None:
             raise HTTPException(422, f"Source {obj.source_id} does not exist")
+        if res.collection == "facts" and existing is not None and existing.value != obj.value and \
+                db.scalar(select(m.CalculationInput).where(m.CalculationInput.fact_id == rid)) is not None:
+            raise HTTPException(409, "This fact is an input to a saved calculation; its value cannot be changed.")
+        if res.collection == "facts" and obj.external_observation_id and db.get(m.ExternalObservation, obj.external_observation_id) is None:
+            raise HTTPException(422, "Linked observation does not exist")
         row = repo.upsert(db, res, obj)
         db.commit()
         return repo.to_out(res, row)
@@ -162,6 +167,8 @@ def _register_scoped(res: repo.Resource) -> None:
         row = db.get(res.model, rid)
         if row is None or row.episode_id != eid:
             raise HTTPException(404, f"{res.collection} record {rid} not found")
+        if res.collection == "facts" and db.scalar(select(m.CalculationInput).where(m.CalculationInput.fact_id == rid)) is not None:
+            raise HTTPException(409, "This fact is an input to a saved calculation; delete the derived fact first.")
         db.delete(row)
         db.commit()
 
