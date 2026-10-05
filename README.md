@@ -87,6 +87,14 @@ Zero-paid core: every provider is free and official; nothing requires an API key
 - Annualizing wages requires explicit assumptions (`POST /economics/annualize`); gross/net is never assumed.
 - Tests: `tests/test_labor.py` (offline recorded ILOSTAT CSV in `tests/fixtures/ilo`); `LIFESPAN_LIVE_TESTS=1` adds live ILOSTAT and UAE checks.
 
+## Phase 5 — life context evidence
+
+- **Life Context Data** page: fetch UN World Population Prospects (official free bulk CSV, downloaded once to `backend/data/cache/`, then works offline; years after 2023 are labelled PROJECTION) and 16 World Bank context indicators (education, urbanisation, labour market, mortality, fertility, migration, remittances, ageing). Structured CSV import for India MoSPI / UAE FCSC / manual tables (education, housing, household spending, family formation, migration, pensions). Registries for historical events, policy evidence and qualitative social context (seeded entries are *unverified* until you check them).
+- **Life Evidence** page: Life Evidence Matrix (13 life stages × 11 domains) with per-year coverage, cell detail (supporting evidence with Evidence Match Scores — not probabilities — candidates outside the validity window, policies, context, assumptions, gaps, research tasks), Simulation Readiness 2.0, evidence gaps → research tasks, the Assumption Register, migration-path evidence and historical events matched to life stages.
+- Wage baselines now show their **wage anchor**: an observation is direct evidence only for its own year.
+- Dataset snapshots also freeze life evidence, life-stage baselines, assumptions, policies, events, context, migration paths, gaps and readiness, with a readable manifest.
+- Live smoke tests: `LIFESPAN_LIVE_TESTS=1 pytest -k live`. Normal tests are offline.
+
 ## Moving Phase 1 browser data
 In backend mode, if this browser still has Phase 1 data, **Settings → Import Local Prototype Data** sends it to the backend (validated, IDs preserved). Existing backend records are only overwritten after confirmation. Browser data is never deleted.
 
