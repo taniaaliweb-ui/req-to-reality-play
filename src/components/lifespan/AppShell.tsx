@@ -7,6 +7,7 @@ import {
 import { useLifespan } from "@/hooks/useLifespan";
 import { STAGE_LABELS, WORKFLOW_STAGES } from "@/types/lifespan";
 import { cn } from "@/lib/utils";
+import { BackendGate } from "./BackendGate";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -56,14 +57,14 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar />
-        <main className="mx-auto w-full max-w-[1400px] flex-1 px-8 py-7">{children}</main>
+        <main className="mx-auto w-full max-w-[1400px] flex-1 px-8 py-7"><BackendGate>{children}</BackendGate></main>
       </div>
     </div>
   );
 }
 
 function TopBar() {
-  const { db, active, activeId, setActiveId, saveState } = useLifespan();
+  const { db, active, activeId, setActiveId, saveState, saveError, mode, syncNow } = useLifespan();
   const stageIdx = active ? WORKFLOW_STAGES.indexOf(active.stage) : -1;
   return (
     <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
@@ -77,9 +78,11 @@ function TopBar() {
         {active?.isMock && <span className="chip border-mock/40 bg-mock-soft text-mock">Mock</span>}
         <div className="ml-auto flex items-center gap-4 text-xs">
           <span className="text-muted-foreground">Stage: <span className="font-medium text-foreground">{active ? STAGE_LABELS[active.stage] : "—"}</span></span>
-          <span className="data flex items-center gap-1.5 text-muted-foreground">
+          <span className="chip border-border text-muted-foreground">{mode === "backend" ? "Backend · SQLite" : "Browser storage"}</span>
+          <span className="data flex items-center gap-1.5 text-muted-foreground" title={saveError ?? undefined}>
             <span className={cn("h-1.5 w-1.5 rounded-full", saveState === "saved" ? "bg-pass" : saveState === "error" ? "bg-fail" : "bg-warn")} />
-            {saveState === "saved" ? "Saved locally" : saveState === "saving" ? "Saving…" : saveState === "error" ? "Save failed" : "Loading…"}
+            {saveState === "saved" ? (mode === "backend" ? "Saved to backend" : "Saved locally") : saveState === "saving" ? "Saving…" : saveState === "error" ? <span className="text-fail">{saveError ?? "Save failed"}</span> : "Loading…"}
+            {saveState === "error" && <button className="btn-ghost" onClick={() => void syncNow()}>Retry</button>}
           </span>
         </div>
       </div>
