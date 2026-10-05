@@ -1,3 +1,4 @@
+import { ExportPanel, ProductionWorkspace } from "@/components/lifespan/product";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useActiveRecords, useLifespan } from "@/hooks/useLifespan";
 import { EmptyEpisode, PageHeader } from "@/components/lifespan/primitives";
@@ -25,7 +26,9 @@ function Production() {
   ] as const;
   return (
     <>
-      <PageHeader eyebrow="Pipeline · 10" title="Production" description="Script export, narration, visuals and video assembly arrive in later phases. This checklist is live." />
+      <PageHeader eyebrow="Pipeline · 10" title="Production" description="Script export, narration, visuals and video assembly arrive in later phases. Production Workspace built from the canonical life: summary, outline, script editor, scenes, notes and exports." />
+      <ProductionWorkspace eid={active.id} />
+      <ExportPanel eid={active.id} />
       <div className="grid grid-cols-[1fr_1fr] gap-6">
         <div className="panel divide-y divide-border">
           {checks.map((c) => (

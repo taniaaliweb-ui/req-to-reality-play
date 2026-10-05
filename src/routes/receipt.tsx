@@ -1,3 +1,4 @@
+import { ExportPanel, Receipt2Panel } from "@/components/lifespan/product";
 import type { ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Printer } from "lucide-react";
@@ -28,6 +29,9 @@ function Receipt() {
   return (
     <>
       <PageHeader eyebrow="Pipeline · 11" title="Life Receipt" description="Derived deterministically from the timeline and economic ledger." actions={<button className="btn" onClick={() => window.print()}><Printer className="h-4 w-4" /> Print</button>} />
+      <Receipt2Panel eid={active.id} />
+      <ExportPanel eid={active.id} />
+      <h2 className="mb-2 text-sm font-medium text-muted-foreground">Prototype receipt (timeline + economic ledger)</h2>
       {active.isMock && <MockBanner>This receipt is computed from mock data. Do not cite any figure.</MockBanner>}
       <div className="grid grid-cols-[440px_1fr] gap-8">
         <div className="receipt px-7 pb-10 pt-7">
