@@ -121,3 +121,9 @@ cd backend && LIFESPAN_LIVE_TESTS=1 .venv/bin/python -m pytest      # also runs 
 
 ## Epistemic rule
 FACT · ESTIMATE · ASSUMPTION · DERIVED · SIMULATION · STORY are always visually distinct and never silently mixed.
+
+## Phase 6 — simulation, story, production, export, MCP
+- Simulation page: Input review (evidence vs simulation coverage) → Run Life → See why → Explore outcomes (10–500 runs as a background job) → Branch & what-if → Prior registry.
+- The canonical life feeds the Timeline (SIMULATED events), Story Engine (structured local draft, no AI), Production (script editor + scenes), Life Receipt 2.0 and exports (JSON archive, CSV, Markdown, printable HTML → Print / Save as PDF).
+- Local MCP server: `cd backend && python -m app.mcp_server` (stdio). System Status shows AVAILABLE only after a real handshake.
+- Tests: `cd backend && python -m pytest` (Phase 6: `tests/test_simulation.py`).
