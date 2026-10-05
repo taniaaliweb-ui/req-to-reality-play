@@ -140,9 +140,11 @@ def upgrade():
         batch_op.add_column(sa.Column('provider', sa.String(length=40), nullable=True))
         batch_op.add_column(sa.Column('dataset', sa.String(length=200), nullable=True))
         batch_op.add_column(sa.Column('indicator_code', sa.String(length=80), nullable=True))
-        batch_op.add_column(sa.Column('is_prototype', sa.Boolean(), nullable=False))
-        batch_op.create_foreign_key(None, 'external_observations', ['external_observation_id'], ['id'], ondelete='SET NULL')
+        batch_op.add_column(sa.Column('is_prototype', sa.Boolean(), nullable=False, server_default=sa.false()))
+        batch_op.create_foreign_key('fk_facts_external_observation', 'external_observations', ['external_observation_id'], ['id'], ondelete='SET NULL')
 
+    # Phase 2 data: every fact in a mock episode is PROTOTYPE data, never verified history.
+    op.execute("UPDATE facts SET is_prototype = 1 WHERE episode_id IN (SELECT id FROM episodes WHERE is_mock = 1)")
     # ### end Alembic commands ###
 
 
@@ -152,7 +154,7 @@ def downgrade():
         # WARNING: constraint name is None; this directive will fail as
         # rendered.  Add a name, or use a naming convention; see
         # https://alembic.sqlalchemy.org/en/latest/naming.html
-        batch_op.drop_constraint(None, type_='foreignkey')
+        batch_op.drop_constraint('fk_facts_external_observation', type_='foreignkey')
         batch_op.drop_column('is_prototype')
         batch_op.drop_column('indicator_code')
         batch_op.drop_column('dataset')
