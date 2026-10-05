@@ -129,14 +129,19 @@ def test_matching_ranking_year_occupation_education_country(srv):
     cands = res["candidates"]
     top = cands[0]
     assert top["wage"]["country"] == "IND" and top["sourceYear"] == 2010
-    assert top["wage"]["occupationCode"] == "3" and top["wage"]["occupationClassification"] == "ISCO-08"
+    # India 2010 occupations are coded ISCO-88: same major group is NOT treated as an exact ISCO-08 match
+    occ88 = next(x for x in cands if x["wage"]["occupationCode"] == "3" and x["wage"]["occupationClassification"] == "ISCO-88" and x["sourceYear"] == 2010)
+    assert any("not assumed equivalent" in b["note"] for b in occ88["breakdown"])
+    p88 = _profile(c, occupationClassification="ISCO-88")
+    top88 = c.get(f"/economic-profiles/{p88['id']}/candidates").json()["candidates"][0]
+    assert top88["wage"]["occupationCode"] == "3" and top88["wage"]["occupationClassification"] == "ISCO-88" and top88["sourceYear"] == 2010
     assert any(b["dimension"] == "Urban/rural" and "unavailable" in b["note"] for b in top["breakdown"])
     scores = [x["score"] for x in cands]
     assert scores == sorted(scores, reverse=True)
     # year distance is penalised
-    same = [x for x in cands if x["wage"]["occupationCode"] == "3" and x["wage"]["occupationClassification"] == "ISCO-08" and x["wage"]["sex"] == "MALE"]
+    same = [x for x in cands if x["wage"]["occupationCode"] == "3" and x["wage"]["occupationClassification"] in ("ISCO-08", "ISCO-88") and x["wage"]["sex"] == "MALE"]
     by_year = {x["sourceYear"]: x["score"] for x in same}
-    assert by_year[2010] > by_year[2018]
+    assert by_year[2012] > by_year[2018] >= 0 and by_year[2010] > by_year[2012] - 7
     # education match ranks above all-education for EDU series
     edu = {x["wage"]["educationCode"]: x["score"] for x in cands if x["wage"]["educationCode"] and x["sourceYear"] == 2010 and x["wage"]["sex"] == "MALE"}
     if "INT" in edu and "TOTAL" in edu:
