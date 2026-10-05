@@ -10,33 +10,232 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuditsRouteImport } from './routes/audits'
+import { Route as DnaRouteImport } from './routes/dna'
+import { Route as EconomicsRouteImport } from './routes/economics'
+import { Route as FactsRouteImport } from './routes/facts'
+import { Route as ProductionRouteImport } from './routes/production'
+import { Route as ReceiptRouteImport } from './routes/receipt'
+import { Route as ResearchRouteImport } from './routes/research'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SimulationRouteImport } from './routes/simulation'
+import { Route as SourcesRouteImport } from './routes/sources'
+import { Route as StatusRouteImport } from './routes/status'
+import { Route as StoryRouteImport } from './routes/story'
+import { Route as TimelineRouteImport } from './routes/timeline'
+import { Route as EpisodesIndexRouteImport } from './routes/episodes.index'
+import { Route as EpisodesNewRouteImport } from './routes/episodes.new'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuditsRoute = AuditsRouteImport.update({
+  id: '/audits',
+  path: '/audits',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DnaRoute = DnaRouteImport.update({
+  id: '/dna',
+  path: '/dna',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EconomicsRoute = EconomicsRouteImport.update({
+  id: '/economics',
+  path: '/economics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FactsRoute = FactsRouteImport.update({
+  id: '/facts',
+  path: '/facts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProductionRoute = ProductionRouteImport.update({
+  id: '/production',
+  path: '/production',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReceiptRoute = ReceiptRouteImport.update({
+  id: '/receipt',
+  path: '/receipt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResearchRoute = ResearchRouteImport.update({
+  id: '/research',
+  path: '/research',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SimulationRoute = SimulationRouteImport.update({
+  id: '/simulation',
+  path: '/simulation',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SourcesRoute = SourcesRouteImport.update({
+  id: '/sources',
+  path: '/sources',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StatusRoute = StatusRouteImport.update({
+  id: '/status',
+  path: '/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StoryRoute = StoryRouteImport.update({
+  id: '/story',
+  path: '/story',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TimelineRoute = TimelineRouteImport.update({
+  id: '/timeline',
+  path: '/timeline',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EpisodesIndexRoute = EpisodesIndexRouteImport.update({
+  id: '/episodes/',
+  path: '/episodes/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EpisodesNewRoute = EpisodesNewRouteImport.update({
+  id: '/episodes/new',
+  path: '/episodes/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/audits': typeof AuditsRoute
+  '/dna': typeof DnaRoute
+  '/economics': typeof EconomicsRoute
+  '/facts': typeof FactsRoute
+  '/production': typeof ProductionRoute
+  '/receipt': typeof ReceiptRoute
+  '/research': typeof ResearchRoute
+  '/settings': typeof SettingsRoute
+  '/simulation': typeof SimulationRoute
+  '/sources': typeof SourcesRoute
+  '/status': typeof StatusRoute
+  '/story': typeof StoryRoute
+  '/timeline': typeof TimelineRoute
+  '/episodes/new': typeof EpisodesNewRoute
+  '/episodes/': typeof EpisodesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/audits': typeof AuditsRoute
+  '/dna': typeof DnaRoute
+  '/economics': typeof EconomicsRoute
+  '/facts': typeof FactsRoute
+  '/production': typeof ProductionRoute
+  '/receipt': typeof ReceiptRoute
+  '/research': typeof ResearchRoute
+  '/settings': typeof SettingsRoute
+  '/simulation': typeof SimulationRoute
+  '/sources': typeof SourcesRoute
+  '/status': typeof StatusRoute
+  '/story': typeof StoryRoute
+  '/timeline': typeof TimelineRoute
+  '/episodes/new': typeof EpisodesNewRoute
+  '/episodes': typeof EpisodesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/audits': typeof AuditsRoute
+  '/dna': typeof DnaRoute
+  '/economics': typeof EconomicsRoute
+  '/facts': typeof FactsRoute
+  '/production': typeof ProductionRoute
+  '/receipt': typeof ReceiptRoute
+  '/research': typeof ResearchRoute
+  '/settings': typeof SettingsRoute
+  '/simulation': typeof SimulationRoute
+  '/sources': typeof SourcesRoute
+  '/status': typeof StatusRoute
+  '/story': typeof StoryRoute
+  '/timeline': typeof TimelineRoute
+  '/episodes/new': typeof EpisodesNewRoute
+  '/episodes/': typeof EpisodesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/audits'
+    | '/dna'
+    | '/economics'
+    | '/facts'
+    | '/production'
+    | '/receipt'
+    | '/research'
+    | '/settings'
+    | '/simulation'
+    | '/sources'
+    | '/status'
+    | '/story'
+    | '/timeline'
+    | '/episodes/new'
+    | '/episodes/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/audits'
+    | '/dna'
+    | '/economics'
+    | '/facts'
+    | '/production'
+    | '/receipt'
+    | '/research'
+    | '/settings'
+    | '/simulation'
+    | '/sources'
+    | '/status'
+    | '/story'
+    | '/timeline'
+    | '/episodes/new'
+    | '/episodes'
+  id:
+    | '__root__'
+    | '/'
+    | '/audits'
+    | '/dna'
+    | '/economics'
+    | '/facts'
+    | '/production'
+    | '/receipt'
+    | '/research'
+    | '/settings'
+    | '/simulation'
+    | '/sources'
+    | '/status'
+    | '/story'
+    | '/timeline'
+    | '/episodes/new'
+    | '/episodes/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuditsRoute: typeof AuditsRoute
+  DnaRoute: typeof DnaRoute
+  EconomicsRoute: typeof EconomicsRoute
+  FactsRoute: typeof FactsRoute
+  ProductionRoute: typeof ProductionRoute
+  ReceiptRoute: typeof ReceiptRoute
+  ResearchRoute: typeof ResearchRoute
+  SettingsRoute: typeof SettingsRoute
+  SimulationRoute: typeof SimulationRoute
+  SourcesRoute: typeof SourcesRoute
+  StatusRoute: typeof StatusRoute
+  StoryRoute: typeof StoryRoute
+  TimelineRoute: typeof TimelineRoute
+  EpisodesNewRoute: typeof EpisodesNewRoute
+  EpisodesIndexRoute: typeof EpisodesIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +247,131 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/audits': {
+      id: '/audits'
+      path: '/audits'
+      fullPath: '/audits'
+      preLoaderRoute: typeof AuditsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dna': {
+      id: '/dna'
+      path: '/dna'
+      fullPath: '/dna'
+      preLoaderRoute: typeof DnaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/economics': {
+      id: '/economics'
+      path: '/economics'
+      fullPath: '/economics'
+      preLoaderRoute: typeof EconomicsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/facts': {
+      id: '/facts'
+      path: '/facts'
+      fullPath: '/facts'
+      preLoaderRoute: typeof FactsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/production': {
+      id: '/production'
+      path: '/production'
+      fullPath: '/production'
+      preLoaderRoute: typeof ProductionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/receipt': {
+      id: '/receipt'
+      path: '/receipt'
+      fullPath: '/receipt'
+      preLoaderRoute: typeof ReceiptRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/research': {
+      id: '/research'
+      path: '/research'
+      fullPath: '/research'
+      preLoaderRoute: typeof ResearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/simulation': {
+      id: '/simulation'
+      path: '/simulation'
+      fullPath: '/simulation'
+      preLoaderRoute: typeof SimulationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sources': {
+      id: '/sources'
+      path: '/sources'
+      fullPath: '/sources'
+      preLoaderRoute: typeof SourcesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/status': {
+      id: '/status'
+      path: '/status'
+      fullPath: '/status'
+      preLoaderRoute: typeof StatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/story': {
+      id: '/story'
+      path: '/story'
+      fullPath: '/story'
+      preLoaderRoute: typeof StoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/timeline': {
+      id: '/timeline'
+      path: '/timeline'
+      fullPath: '/timeline'
+      preLoaderRoute: typeof TimelineRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/episodes/': {
+      id: '/episodes/'
+      path: '/episodes'
+      fullPath: '/episodes/'
+      preLoaderRoute: typeof EpisodesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/episodes/new': {
+      id: '/episodes/new'
+      path: '/episodes/new'
+      fullPath: '/episodes/new'
+      preLoaderRoute: typeof EpisodesNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuditsRoute: AuditsRoute,
+  DnaRoute: DnaRoute,
+  EconomicsRoute: EconomicsRoute,
+  FactsRoute: FactsRoute,
+  ProductionRoute: ProductionRoute,
+  ReceiptRoute: ReceiptRoute,
+  ResearchRoute: ResearchRoute,
+  SettingsRoute: SettingsRoute,
+  SimulationRoute: SimulationRoute,
+  SourcesRoute: SourcesRoute,
+  StatusRoute: StatusRoute,
+  StoryRoute: StoryRoute,
+  TimelineRoute: TimelineRoute,
+  EpisodesNewRoute: EpisodesNewRoute,
+  EpisodesIndexRoute: EpisodesIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
