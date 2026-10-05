@@ -14,6 +14,7 @@ import { Route as AuditsRouteImport } from './routes/audits'
 import { Route as DataRouteImport } from './routes/data'
 import { Route as DnaRouteImport } from './routes/dna'
 import { Route as EconomicsRouteImport } from './routes/economics'
+import { Route as EvidenceRouteImport } from './routes/evidence'
 import { Route as FactsRouteImport } from './routes/facts'
 import { Route as LaborRouteImport } from './routes/labor'
 import { Route as ProductionRouteImport } from './routes/production'
@@ -21,6 +22,7 @@ import { Route as ReceiptRouteImport } from './routes/receipt'
 import { Route as ResearchRouteImport } from './routes/research'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SimulationRouteImport } from './routes/simulation'
+import { Route as SnapshotsRouteImport } from './routes/snapshots'
 import { Route as SourcesRouteImport } from './routes/sources'
 import { Route as StatusRouteImport } from './routes/status'
 import { Route as StoryRouteImport } from './routes/story'
@@ -51,6 +53,11 @@ const DnaRoute = DnaRouteImport.update({
 const EconomicsRoute = EconomicsRouteImport.update({
   id: '/economics',
   path: '/economics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EvidenceRoute = EvidenceRouteImport.update({
+  id: '/evidence',
+  path: '/evidence',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FactsRoute = FactsRouteImport.update({
@@ -86,6 +93,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const SimulationRoute = SimulationRouteImport.update({
   id: '/simulation',
   path: '/simulation',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SnapshotsRoute = SnapshotsRouteImport.update({
+  id: '/snapshots',
+  path: '/snapshots',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SourcesRoute = SourcesRouteImport.update({
@@ -125,6 +137,7 @@ export interface FileRoutesByFullPath {
   '/data': typeof DataRoute
   '/dna': typeof DnaRoute
   '/economics': typeof EconomicsRoute
+  '/evidence': typeof EvidenceRoute
   '/facts': typeof FactsRoute
   '/labor': typeof LaborRoute
   '/production': typeof ProductionRoute
@@ -132,6 +145,7 @@ export interface FileRoutesByFullPath {
   '/research': typeof ResearchRoute
   '/settings': typeof SettingsRoute
   '/simulation': typeof SimulationRoute
+  '/snapshots': typeof SnapshotsRoute
   '/sources': typeof SourcesRoute
   '/status': typeof StatusRoute
   '/story': typeof StoryRoute
@@ -145,6 +159,7 @@ export interface FileRoutesByTo {
   '/data': typeof DataRoute
   '/dna': typeof DnaRoute
   '/economics': typeof EconomicsRoute
+  '/evidence': typeof EvidenceRoute
   '/facts': typeof FactsRoute
   '/labor': typeof LaborRoute
   '/production': typeof ProductionRoute
@@ -152,6 +167,7 @@ export interface FileRoutesByTo {
   '/research': typeof ResearchRoute
   '/settings': typeof SettingsRoute
   '/simulation': typeof SimulationRoute
+  '/snapshots': typeof SnapshotsRoute
   '/sources': typeof SourcesRoute
   '/status': typeof StatusRoute
   '/story': typeof StoryRoute
@@ -166,6 +182,7 @@ export interface FileRoutesById {
   '/data': typeof DataRoute
   '/dna': typeof DnaRoute
   '/economics': typeof EconomicsRoute
+  '/evidence': typeof EvidenceRoute
   '/facts': typeof FactsRoute
   '/labor': typeof LaborRoute
   '/production': typeof ProductionRoute
@@ -173,6 +190,7 @@ export interface FileRoutesById {
   '/research': typeof ResearchRoute
   '/settings': typeof SettingsRoute
   '/simulation': typeof SimulationRoute
+  '/snapshots': typeof SnapshotsRoute
   '/sources': typeof SourcesRoute
   '/status': typeof StatusRoute
   '/story': typeof StoryRoute
@@ -188,6 +206,7 @@ export interface FileRouteTypes {
     | '/data'
     | '/dna'
     | '/economics'
+    | '/evidence'
     | '/facts'
     | '/labor'
     | '/production'
@@ -195,6 +214,7 @@ export interface FileRouteTypes {
     | '/research'
     | '/settings'
     | '/simulation'
+    | '/snapshots'
     | '/sources'
     | '/status'
     | '/story'
@@ -208,6 +228,7 @@ export interface FileRouteTypes {
     | '/data'
     | '/dna'
     | '/economics'
+    | '/evidence'
     | '/facts'
     | '/labor'
     | '/production'
@@ -215,6 +236,7 @@ export interface FileRouteTypes {
     | '/research'
     | '/settings'
     | '/simulation'
+    | '/snapshots'
     | '/sources'
     | '/status'
     | '/story'
@@ -228,6 +250,7 @@ export interface FileRouteTypes {
     | '/data'
     | '/dna'
     | '/economics'
+    | '/evidence'
     | '/facts'
     | '/labor'
     | '/production'
@@ -235,6 +258,7 @@ export interface FileRouteTypes {
     | '/research'
     | '/settings'
     | '/simulation'
+    | '/snapshots'
     | '/sources'
     | '/status'
     | '/story'
@@ -249,6 +273,7 @@ export interface RootRouteChildren {
   DataRoute: typeof DataRoute
   DnaRoute: typeof DnaRoute
   EconomicsRoute: typeof EconomicsRoute
+  EvidenceRoute: typeof EvidenceRoute
   FactsRoute: typeof FactsRoute
   LaborRoute: typeof LaborRoute
   ProductionRoute: typeof ProductionRoute
@@ -256,6 +281,7 @@ export interface RootRouteChildren {
   ResearchRoute: typeof ResearchRoute
   SettingsRoute: typeof SettingsRoute
   SimulationRoute: typeof SimulationRoute
+  SnapshotsRoute: typeof SnapshotsRoute
   SourcesRoute: typeof SourcesRoute
   StatusRoute: typeof StatusRoute
   StoryRoute: typeof StoryRoute
@@ -299,6 +325,13 @@ declare module '@tanstack/react-router' {
       path: '/economics'
       fullPath: '/economics'
       preLoaderRoute: typeof EconomicsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/evidence': {
+      id: '/evidence'
+      path: '/evidence'
+      fullPath: '/evidence'
+      preLoaderRoute: typeof EvidenceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/facts': {
@@ -348,6 +381,13 @@ declare module '@tanstack/react-router' {
       path: '/simulation'
       fullPath: '/simulation'
       preLoaderRoute: typeof SimulationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/snapshots': {
+      id: '/snapshots'
+      path: '/snapshots'
+      fullPath: '/snapshots'
+      preLoaderRoute: typeof SnapshotsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sources': {
@@ -401,6 +441,7 @@ const rootRouteChildren: RootRouteChildren = {
   DataRoute: DataRoute,
   DnaRoute: DnaRoute,
   EconomicsRoute: EconomicsRoute,
+  EvidenceRoute: EvidenceRoute,
   FactsRoute: FactsRoute,
   LaborRoute: LaborRoute,
   ProductionRoute: ProductionRoute,
@@ -408,6 +449,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResearchRoute: ResearchRoute,
   SettingsRoute: SettingsRoute,
   SimulationRoute: SimulationRoute,
+  SnapshotsRoute: SnapshotsRoute,
   SourcesRoute: SourcesRoute,
   StatusRoute: StatusRoute,
   StoryRoute: StoryRoute,
