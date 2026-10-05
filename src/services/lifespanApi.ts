@@ -98,11 +98,12 @@ export class HttpLifespanApi implements LifespanApi {
   private async req<T>(method: string, path: string, body?: unknown): Promise<T> {
     let res: Response;
     try {
-      res = await fetch(`${this.baseUrl}/api/v1${path}`, {
-        method,
-        headers: body === undefined ? undefined : { "Content-Type": "application/json" },
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
+      const init: RequestInit = { method };
+      if (body !== undefined) {
+        init.headers = { "Content-Type": "application/json" };
+        init.body = JSON.stringify(body);
+      }
+      res = await fetch(`${this.baseUrl}/api/v1${path}`, init);
     } catch (e) {
       console.error("[lifespanApi] network error", method, path, e);
       throw new BackendUnavailableError(this.baseUrl);
