@@ -136,7 +136,7 @@ def test_economics_reconcile_and_death_terminates(srv):
 def test_locks_survive_rerun_restart_and_branch(srv):
     c = srv.client()
     tl = c.get(f"/episodes/{EP}/timeline").json()
-    mig = next((e for e in tl if e["category"] == "Migration"), None)
+    mig = next((e for e in tl if e["category"] == "Migration" and "Dubai" in (e.get("location") or "")), None)
     assert mig, "demo timeline should contain a migration event"
     mig["locked"] = True
     assert c.patch(f"/episodes/{EP}/timeline/{mig['id']}", json={"locked": True}).status_code in (200, 201)
