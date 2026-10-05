@@ -33,9 +33,9 @@ function Economics() {
           <div className="panel mb-4 p-4">
             <div className="eyebrow mb-2">Net worth over lifetime</div>
             <div className="flex h-32 items-end gap-[2px]">
-              {economics.map((y, i) => <div key={y.id} title={`${y.year}: ${formatMoney(nws[i])}`} className={cn("flex-1 rounded-t-[1px]", y.year >= 2004 && y.year < 2018 ? "bg-primary" : "bg-foreground/60")} style={{ height: `${Math.max(1, (nws[i] / max) * 100)}%` }} />)}
+              {economics.map((y, i) => <div key={y.id} title={`${y.year}: ${formatMoney(nws[i] ?? 0)}`} className={cn("flex-1 rounded-t-[1px]", y.year >= 2004 && y.year < 2018 ? "bg-primary" : "bg-foreground/60")} style={{ height: `${Math.max(1, ((nws[i] ?? 0) / max) * 100)}%` }} />)}
             </div>
-            <div className="data mt-1 flex justify-between text-[10px] text-muted-foreground"><span>{economics[0].year}</span><span>{economics[economics.length - 1].year}</span></div>
+            <div className="data mt-1 flex justify-between text-[10px] text-muted-foreground"><span>{economics[0]?.year}</span><span>{economics.at(-1)?.year}</span></div>
           </div>
           <div className="grid grid-cols-3 gap-3 mb-4">
             {["Inflation calculator", "Currency conversion", "Purchasing power adjustment"].map((t) => (
@@ -56,7 +56,7 @@ function Economics() {
               </tbody>
             </table>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">Total expenses in final year: {formatMoney(totalExpenses(economics[economics.length - 1]))}.</p>
+          <p className="mt-2 text-xs text-muted-foreground">Total expenses in final year: {formatMoney(economics.at(-1) ? totalExpenses(economics.at(-1)!) : 0)}.</p>
         </>
       )}
     </>

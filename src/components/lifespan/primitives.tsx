@@ -62,7 +62,7 @@ export const OutcomeChip = ({ o }: { o: AuditOutcome }) => <span className={cn("
 export const SimChip = () => <span className="chip border-sim/40 bg-sim-soft text-sim">Simulation</span>;
 export const StoryChip = () => <span className="chip border-primary/30 bg-accent text-primary">Story</span>;
 
-export function Stat({ label, value, hint, tone }: { label: string; value: ReactNode; hint?: string; tone?: "warn" | "fail" }) {
+export function Stat({ label, value, hint, tone }: { label: string; value: ReactNode; hint?: string; tone?: "warn" | "fail" | undefined }) {
   return (
     <div className="panel px-4 py-3">
       <div className="eyebrow">{label}</div>

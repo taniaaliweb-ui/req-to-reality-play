@@ -126,8 +126,8 @@ export function buildDemoDB(): LifespanDB {
   const chapterEvents = [["E-01"], ["E-02"], ["E-03", "E-04"], ["E-05", "E-06"], ["E-07"], ["E-08", "E-09"], ["E-10", "E-11"], ["E-12", "E-13", "E-14"], ["E-15"], ["E-16"], ["E-17"], []];
   const chapters: StoryChapter[] = chapterTitles.map((title, i) => ({
     ...base(`CH-${i + 1}`), episodeId: EP, number: i + 1, title,
-    timelineEventIds: chapterEvents[i],
-    factIds: timeline.filter((e) => chapterEvents[i].includes(e.id)).flatMap((e) => e.factIds),
+    timelineEventIds: (chapterEvents[i] ?? []),
+    factIds: timeline.filter((e) => (chapterEvents[i] ?? []).includes(e.id)).flatMap((e) => e.factIds),
     assumptionIds: i === 0 ? ["F-007"] : i === 7 ? ["F-009"] : [],
     text: i === 0
       ? "[DRAFT — human-written placeholder]\n\nThe flat had two rooms and a balcony that his mother used as a kitchen. He was the middle child of three, born in the winter of 1970 to a father who checked meters for the electricity board.\n\nWhat the family could afford — and what it could not — would shape most of what followed."

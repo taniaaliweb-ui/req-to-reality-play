@@ -48,11 +48,12 @@ export function runAudits(db: LifespanDB, episodeId: string): AuditResult[] {
   push(neg.length
     ? { category: "Economic", outcome: "FAIL", title: "Negative savings detected", explanation: "Savings below zero without debt.", refs: neg.map((y) => y.id), automated: true }
     : { category: "Economic", outcome: "PASS", title: "No negative savings", explanation: `Checked ${econ.length} years. Peak net worth computed deterministically.`, refs: [], automated: true });
-  if (econ.length && netWorth(econ[econ.length - 1]) < 0)
+  const lastY = econ.at(-1);
+  if (lastY && netWorth(lastY) < 0)
     push({ category: "Economic", outcome: "WARNING", title: "Dies with negative net worth", explanation: "Plausible but should be narratively addressed.", refs: [], automated: true });
 
   // Geographic
-  const mismatch = events.filter((e) => e.category === "Migration" && /moves to (\w+)/i.test(e.title) && !e.location.toLowerCase().includes(e.title.match(/moves to (\w+)/i)![1].toLowerCase()));
+  const mismatch = events.filter((e) => e.category === "Migration" && /moves to (\w+)/i.test(e.title) && !e.location.toLowerCase().includes(e.title.match(/moves to (\w+)/i)?.[1]?.toLowerCase() ?? ""));
   push(mismatch.length
     ? { category: "Geographic", outcome: "FAIL", title: "Migration destination ≠ event location", explanation: "Location field contradicts the title.", refs: mismatch.map((e) => e.id), automated: true }
     : { category: "Geographic", outcome: "PASS", title: "Migration locations consistent", explanation: "Checked relocation events.", refs: [], automated: true });

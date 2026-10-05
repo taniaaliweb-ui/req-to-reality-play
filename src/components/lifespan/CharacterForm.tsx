@@ -2,7 +2,7 @@ import type { Character, Gender, Settlement, SocioClass } from "@/types/lifespan
 import { CLASS_LABELS, CONTROL_LABELS, TRAIT_LABELS } from "@/lib/defaults";
 import { Field, Slider } from "./primitives";
 
-type Props = { value: Character; onChange: (c: Character) => void; section?: "identity" | "family" | "traits" | "controls" | "all" };
+type Props = { value: Character; onChange: (c: Character) => void; section?: "identity" | "family" | "traits" | "controls" | "all" | undefined };
 
 export function CharacterForm({ value: c, onChange, section = "all" }: Props) {
   const set = (p: Partial<Character>) => onChange({ ...c, ...p });
@@ -77,7 +77,7 @@ export function DnaSummary({ c }: { c: Character }) {
   const pressure = c.family.siblings >= 3 || ["poverty", "working"].includes(c.startingClass) ? "High" : c.startingClass === "lower-middle" ? "Moderate" : "Low";
   const rows: [string, string[]][] = [
     ["Born", [`${c.country}, ${c.birthYear}`, c.region]],
-    ["Environment", [`${c.settlement[0].toUpperCase()}${c.settlement.slice(1)} ${CLASS_LABELS[c.startingClass].toLowerCase()}`]],
+    ["Environment", [`${c.settlement.charAt(0).toUpperCase()}${c.settlement.slice(1)} ${CLASS_LABELS[c.startingClass].toLowerCase()}`]],
     ["Family", [`${c.family.guardians} parent(s)/guardian(s)`, `${c.family.siblings + 1} children`, `${pressure} financial pressure`, c.family.housing]],
     ["Traits", [`${lv(c.traits.ambition)} ambition`, `${lv(c.traits.riskTolerance)} risk tolerance`, `${lv(c.traits.resilience)} resilience`, `${lv(c.traits.migrationWillingness)} migration willingness`]],
     ["Simulation", [`${lv(c.controls.realism)} realism`, `${lv(c.controls.randomness)} randomness`, `${lv(c.controls.adversity)} adversity`]],

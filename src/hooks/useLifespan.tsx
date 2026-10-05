@@ -70,7 +70,7 @@ export function LifespanProvider({ children }: { children: ReactNode }) {
   const reset = useCallback(async () => {
     const fresh = await lifespanApi.reset();
     setDb(fresh);
-    setActiveId(fresh.episodes[0].id);
+    setActiveId(fresh.episodes[0]?.id ?? "");
   }, [setActiveId]);
 
   const value = useMemo<Ctx>(
