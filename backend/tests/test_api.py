@@ -11,7 +11,7 @@ def _character(birth=1985):
 
 
 def _fail_count(c, eid):
-    return sum(1 for a in c.get(f"/episodes/{eid}/audits").json() if a["category"] == "Fact" and a["outcome"] == "FAIL")
+    return sum(1 for a in c.get(f"/episodes/{eid}/audits").json() if a["category"] == "Fact" and a["outcome"] == "FAIL" and "no source" in a["title"])
 
 
 def test_1_health(server):

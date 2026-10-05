@@ -3,6 +3,7 @@ File name = path with '/' replaced by '_' plus '.json' (e.g. country_IN_indicato
 A file named '<name>.status' containing e.g. 500 forces that HTTP status; 'TIMEOUT' raises a timeout."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import httpx
@@ -22,6 +23,11 @@ def fixture_transport(directory: str) -> httpx.MockTransport:
         f = root / f"{name}.json"
         if not f.exists():
             return httpx.Response(200, json=[{"message": [{"id": "120", "key": "Invalid value", "value": "The provided parameter value is not valid"}]}])
-        return httpx.Response(200, text=f.read_text(), headers={"content-type": "application/json"})
+        data = json.loads(f.read_text())
+        date = request.url.params.get("date")
+        if date and len(data) > 1 and isinstance(data[1], list):
+            y0, _, y1 = date.partition(":")
+            data[1] = [r for r in data[1] if int(y0) <= int(r["date"]) <= int(y1 or y0)]
+        return httpx.Response(200, json=data)
 
     return httpx.MockTransport(handler)
