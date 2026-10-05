@@ -361,6 +361,8 @@ export interface AppSettings {
   worldBankEnabled?: boolean;
   ilostatEnabled?: boolean;
   uaeStatEnabled?: boolean;
+  unWppEnabled?: boolean;
+  simulationRequiredDomains?: string[];
 }
 
 // ---------- Phase 3: truth + economic engine (backend-only data) ----------
@@ -512,6 +514,7 @@ export interface BaselineInput {
 export interface EvidenceGap {
   id: string; episodeId: string; gapKey: string; title: string; reason: string; category: string; country: string; yearStart: number; yearEnd: number;
   priority: "HIGH" | "MEDIUM" | "LOW"; status: "open" | "resolved"; auto: boolean; researchTaskId: string | null; createdAt: string;
+  domain?: string | null; lifeStage?: string | null; targetPopulation?: string | null;
 }
 export interface Readiness { stages: { stage: LifeStageKey; label: string; status: "READY" | "PARTIAL" | "MISSING"; reasons: string[] }[]; overall: number; note: string }
 
@@ -533,3 +536,59 @@ export interface DatasetSnapshot {
 }
 export interface SnapshotDiffItem { kind: "added" | "removed" | "changed" | "unchanged"; id: string; label: string; old?: string; new?: string }
 export interface SnapshotDiff { from: DatasetSnapshot; to: DatasetSnapshot; observations: SnapshotDiffItem[]; facts: SnapshotDiffItem[]; baselines: SnapshotDiffItem[] }
+
+// ---------- Phase 5: life-context evidence (backend-only data) ----------
+export type Coverage = "DIRECT" | "NEARBY" | "DERIVED" | "ASSUMED" | "MISSING";
+export type CellStatus = "READY" | "PARTIAL" | "MISSING" | "NOT_APPLICABLE";
+export interface YearCoverage { year: number; coverage: Coverage; sourceYear: number | null; distance: number | null; note?: string; closestEvidenceYear?: number | null }
+export interface WageAnchorCoverage {
+  semantics: "WAGE_ANCHOR" | "ASSUMPTION" | "NONE"; anchors: { year: number; value: string; population: string; statisticType: string; observationId: string }[];
+  directCoverage: number[]; stage: [number, number]; windowYears: number; years: YearCoverage[]; counts: Record<string, number>; unresolvedYears: number[]; note: string;
+}
+export interface MatchScore { score: number; breakdown: { dimension: string; points: number; max: number; note: string }[]; yearDistance: number; countryMatch: boolean; label: string }
+export interface LifeObservation {
+  id: string; externalObservationId: string | null; domain: string; metric: string; metricLabel: string; value: string; unit: string; country: string;
+  region: string | null; geoLevel: "NATIONAL" | "REGION" | "CITY"; year: number; sex: string | null; ageGroup: string | null; educationLevel: string | null;
+  urbanRural: string | null; incomeGroup: string | null; category: string | null; originCountry: string | null; destinationCountry: string | null;
+  populationScope: string; observationType: string; provider: string; dataset: string; source: string; sourceOrganization: string; isPrototype: boolean;
+  notes: string; statisticKind: "POPULATION_STATISTIC"; match?: MatchScore; outsideWindow?: boolean;
+}
+export interface MatrixCell {
+  domain: string; label: string; critical: boolean; windowYears: number; windowReason: string; status: CellStatus; reasons: string[];
+  coverage: YearCoverage[]; counts?: Record<Coverage, number>; supportingCount?: number; assumptionCount?: number; gapCount?: number;
+  supporting?: (LifeObservation & Record<string, unknown>)[]; candidates?: LifeObservation[]; extra?: Record<string, unknown>[];
+  assumptions?: AssumptionRecord[]; gaps?: EvidenceGap[]; researchTasks?: { id: string; question: string; status: string }[];
+}
+export interface MatrixStage { stage: string; label: string; yearStart: number; yearEnd: number; basis: string; applicable: boolean; countries: string[]; cities: string[]; status: CellStatus; cells: MatrixCell[] }
+export interface LifeMatrix { plan: { origin: string; birthYear: number; moves: { year: number; country: string; city: string }[] }; stages: MatrixStage[]; domains: { key: string; label: string }[]; note: string }
+export interface ReadinessV2 {
+  overall: "READY" | "PARTIAL" | "NOT_READY"; required: string[]; blocking: string[]; note: string;
+  groups: { key: string; label: string; status: "READY" | "PARTIAL" | "NOT_READY" | "NOT_APPLICABLE"; required: boolean; ready: number; partial: number; missing: number }[];
+  stages: { stage: string; label: string; status: CellStatus }[];
+}
+export interface AssumptionRecord {
+  id: string; episodeId: string; kind: "register" | "fact"; domain: string; lifeStage: string; claim: string; value: string; unit: string;
+  yearStart: number | null; yearEnd: number | null; reason: string; createdBy: string; createdAt: string; confidence: string; status: string;
+  includedInSnapshots: string[]; isPrototype?: boolean;
+}
+export interface AssumptionInput { domain: string; lifeStage: string; claim: string; value?: string; unit?: string; yearStart?: number; yearEnd?: number; reason: string; confidence?: "HIGH" | "MEDIUM" | "LOW" }
+export interface HistoricalEventRec {
+  id: string; name: string; category: string; geography: string[]; region: string | null; startDate: string; endDate: string | null; economicRelevance: string;
+  description: string; sources: { organization: string; title: string; url: string }[]; verification: "verified" | "unverified";
+  matches?: { stage: string; label: string; relevance: "RELEVANT" | "POSSIBLY_RELEVANT"; reason: string }[]; relevant?: boolean;
+}
+export interface PolicyRec {
+  id: string; country: string; policyType: string; title: string; effectiveStart: string; effectiveEnd: string | null; description: string; source: string;
+  sourceOrganization: string; sourceUrl: string; factType: string; confidence: string; verification: "verified" | "unverified"; notes: string;
+}
+export interface ContextRec {
+  id: string; topic: string; country: string; region: string | null; yearStart: number; yearEnd: number; populationScope: string; claim: string; source: string;
+  sourceUrl: string; evidenceType: string; confidence: string; dataKind: string;
+}
+export interface LifeObsSummary { domain: string; country: string; provider: string; count: number; yearMin: number; yearMax: number }
+export interface MigrationPathEvidence {
+  id: string; origin: string; destination: string; yearStart: number; yearEnd: number; notes: string; auto: boolean; observations: LifeObservation[];
+  bilateralObservations: number; policies: PolicyRec[]; destinationWageYears: number[]; missing: string[]; note: string;
+}
+export interface LifeImportPreview { rows: { line: number; row: Record<string, string>; errors: string[] }[]; errors: string[]; valid: number; header: string[]; committed?: number }
+export interface SnapshotManifest { title: string; status: string; contentHash: string | null; lines: { label: string; count: number }[]; readiness: { overall: string; groups: { label: string; status: string }[] } | null; phase5Contents: boolean }
