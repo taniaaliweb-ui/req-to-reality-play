@@ -106,6 +106,7 @@ class TimelineEvent(Stamped, Base):
     fact_ids: Mapped[list] = mapped_column(JSON, default=list)
     simulation_reason: Mapped[str] = mapped_column(Text, default="")
     locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    simulation_run_id: Mapped[str | None] = mapped_column(String(80), nullable=True)  # set = written from a canonical simulated life
 
 
 class EconomicYear(Base):
@@ -645,3 +646,188 @@ class SnapshotRecord(Base):
     record_type: Mapped[str] = mapped_column(String(30), primary_key=True)
     record_id: Mapped[str] = mapped_column(String(200), primary_key=True)
     payload: Mapped[dict] = mapped_column(JSON)
+
+
+# ---------------- Phase 6: simulation, story, production, research interface ----------------
+RUN_FK = lambda: ForeignKey("life_simulation_runs.id", ondelete="CASCADE")  # noqa: E731
+
+
+class SimulationPrior(Base):
+    """Provisional model prior — NOT a researched probability. Versioned: an edit creates a new row
+    (same key, version+1) and deactivates the previous one, so old simulation inputs stay reproducible."""
+    __tablename__ = "simulation_priors"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)  # e.g. P-MARRIAGE-BASE@v1
+    key: Mapped[str] = mapped_column(String(60), index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    domain: Mapped[str] = mapped_column(String(40))
+    name: Mapped[str] = mapped_column(Text)
+    description: Mapped[str] = mapped_column(Text, default="")
+    parameter: Mapped[dict] = mapped_column(JSON)
+    conditions: Mapped[dict] = mapped_column(JSON, default=dict)
+    source_type: Mapped[str] = mapped_column(String(40), default="PROVISIONAL_SYSTEM_PRIOR")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)  # disabled = not approved for simulation use
+    active: Mapped[bool] = mapped_column(Boolean, default=True)  # latest version of its key
+    created_at: Mapped[str] = mapped_column(String(40))
+    updated_at: Mapped[str] = mapped_column(String(40))
+
+
+class SimulationInput(Base):
+    """Frozen input package (immutable via DB trigger)."""
+    __tablename__ = "simulation_inputs"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    episode_id: Mapped[str] = mapped_column(EP_FK(), index=True)
+    dataset_snapshot_id: Mapped[str] = mapped_column(String(80))
+    character_version: Mapped[str] = mapped_column(String(64))
+    assumption_ids: Mapped[list] = mapped_column(JSON, default=list)
+    locked_timeline_event_ids: Mapped[list] = mapped_column(JSON, default=list)
+    prior_ids: Mapped[list] = mapped_column(JSON, default=list)
+    prior_registry_version: Mapped[str] = mapped_column(String(64))
+    economic_engine_version: Mapped[str] = mapped_column(String(20))
+    simulation_engine_version: Mapped[str] = mapped_column(String(20))
+    config: Mapped[dict] = mapped_column(JSON)
+    master_seed: Mapped[int] = mapped_column(Integer)
+    payload: Mapped[dict] = mapped_column(JSON)  # frozen character, assumptions, locks, priors, evidence
+    review: Mapped[dict] = mapped_column(JSON)
+    acknowledged: Mapped[bool] = mapped_column(Boolean, default=False)
+    content_hash: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class LifeSimulationRun(Base):
+    __tablename__ = "life_simulation_runs"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    episode_id: Mapped[str] = mapped_column(EP_FK(), index=True)
+    input_id: Mapped[str] = mapped_column(ForeignKey("simulation_inputs.id", ondelete="CASCADE"), index=True)
+    seed: Mapped[int] = mapped_column(Integer)
+    engine_version: Mapped[str] = mapped_column(String(20))
+    kind: Mapped[str] = mapped_column(String(20), default="single")  # single | batch | branch | regenerate | what-if
+    status: Mapped[str] = mapped_column(String(12), default="COMPLETED")
+    batch_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    parent_run_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    branch_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    overrides: Mapped[list] = mapped_column(JSON, default=list)
+    label: Mapped[str] = mapped_column(String(200), default="")
+    final_state: Mapped[dict] = mapped_column(JSON, default=dict)
+    economic_summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    outcome: Mapped[dict] = mapped_column(JSON, default=dict)
+    quality_report: Mapped[dict] = mapped_column(JSON, default=dict)
+    audit: Mapped[list] = mapped_column(JSON, default=list)
+    is_canonical: Mapped[bool] = mapped_column(Boolean, default=False)
+    canonical_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[str] = mapped_column(String(40))
+    completed_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
+
+class AnnualLifeState(Base):
+    __tablename__ = "annual_life_states"
+    run_id: Mapped[str] = mapped_column(RUN_FK(), primary_key=True)
+    year: Mapped[int] = mapped_column(Integer, primary_key=True)
+    age: Mapped[int] = mapped_column(Integer)
+    country: Mapped[str] = mapped_column(String(8))
+    employment_state: Mapped[str] = mapped_column(String(20))
+    currency: Mapped[str] = mapped_column(String(8))
+    income: Mapped[str] = mapped_column(String(40))
+    net_worth: Mapped[str] = mapped_column(String(40))
+    state: Mapped[dict] = mapped_column(JSON)
+
+
+class SimulationEvent(Base):
+    __tablename__ = "simulation_events"
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    run_id: Mapped[str] = mapped_column(RUN_FK(), index=True)
+    seq: Mapped[int] = mapped_column(Integer)
+    year: Mapped[int] = mapped_column(Integer)
+    age: Mapped[int] = mapped_column(Integer)
+    domain: Mapped[str] = mapped_column(String(30))
+    event_type: Mapped[str] = mapped_column(String(40))
+    state_before: Mapped[dict] = mapped_column(JSON, default=dict)
+    state_after: Mapped[dict] = mapped_column(JSON, default=dict)
+    probability: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    probability_class: Mapped[str] = mapped_column(String(30))
+    probability_source_ids: Mapped[list] = mapped_column(JSON, default=list)
+    fact_ids: Mapped[list] = mapped_column(JSON, default=list)
+    evidence_ids: Mapped[list] = mapped_column(JSON, default=list)
+    assumption_ids: Mapped[list] = mapped_column(JSON, default=list)
+    prior_ids: Mapped[list] = mapped_column(JSON, default=list)
+    rule_id: Mapped[str] = mapped_column(String(60))
+    rule_version: Mapped[str] = mapped_column(String(10))
+    modifiers: Mapped[list] = mapped_column(JSON, default=list)
+    base_probability: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    random_draw: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    outcome: Mapped[str] = mapped_column(String(20))  # OCCURRED | NOT_OCCURRED | FORCED | DETERMINISTIC
+    occurred: Mapped[bool] = mapped_column(Boolean)
+    importance: Mapped[int] = mapped_column(Integer, default=1)
+    explanation: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class SimulationJob(Base):
+    __tablename__ = "simulation_jobs"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    episode_id: Mapped[str] = mapped_column(EP_FK(), index=True)
+    kind: Mapped[str] = mapped_column(String(30))
+    status: Mapped[str] = mapped_column(String(12))  # QUEUED | RUNNING | COMPLETED | FAILED | CANCELLED
+    total: Mapped[int] = mapped_column(Integer, default=0)
+    done: Mapped[int] = mapped_column(Integer, default=0)
+    params: Mapped[dict] = mapped_column(JSON, default=dict)
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[str] = mapped_column(String(40))
+    started_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    completed_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
+
+class StoryArtifact(Base):
+    """Generated story / production structure for one canonical run (kind = story | production)."""
+    __tablename__ = "story_artifacts"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    episode_id: Mapped[str] = mapped_column(EP_FK(), index=True)
+    run_id: Mapped[str] = mapped_column(String(80))
+    kind: Mapped[str] = mapped_column(String(20))
+    payload: Mapped[dict] = mapped_column(JSON)
+    edited: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[str] = mapped_column(String(40))
+    updated_at: Mapped[str] = mapped_column(String(40))
+
+
+class CandidateEvidence(Base):
+    """Evidence submitted by an external researcher (human, MCP agent, future AI). Never self-verifying."""
+    __tablename__ = "candidate_evidence"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    episode_id: Mapped[str | None] = mapped_column(EP_FK(), nullable=True, index=True)
+    research_task_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    claim: Mapped[str] = mapped_column(Text)
+    value: Mapped[str] = mapped_column(String(120), default="")
+    unit: Mapped[str] = mapped_column(String(120), default="")
+    location: Mapped[str] = mapped_column(String(200), default="")
+    period_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    period_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source: Mapped[str] = mapped_column(Text)
+    url: Mapped[str] = mapped_column(Text, default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    proposed_type: Mapped[str] = mapped_column(String(30), default="FACT")
+    submitted_by: Mapped[str] = mapped_column(String(80), default="user")
+    status: Mapped[str] = mapped_column(String(16), default="PENDING_REVIEW")
+    review_note: Mapped[str] = mapped_column(Text, default="")
+    reviewed_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class AgentJob(Base):
+    """Reserved for future AI orchestration. No provider is configured; nothing produces results yet."""
+    __tablename__ = "agent_jobs"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    role: Mapped[str] = mapped_column(String(30))
+    task: Mapped[str] = mapped_column(Text)
+    parent_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    input: Mapped[dict] = mapped_column(JSON, default=dict)
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="QUEUED")
+    provider: Mapped[str] = mapped_column(String(20), default="NOT_CONFIGURED")
+    model: Mapped[str] = mapped_column(String(80), default="")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(String(40))
+    updated_at: Mapped[str] = mapped_column(String(40))

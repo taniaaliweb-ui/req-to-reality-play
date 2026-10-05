@@ -136,6 +136,7 @@ class TimelineEventIn(Stamped):
     fact_ids: list[Id] = []
     simulation_reason: str = ""
     locked: bool = False
+    simulation_run_id: str | None = None
 
 
 class EconomicYearIn(Schema):
