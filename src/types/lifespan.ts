@@ -359,6 +359,8 @@ export interface AppSettings {
   currencyDisplay: "local" | "USD";
   externalDataEnabled?: boolean;
   worldBankEnabled?: boolean;
+  ilostatEnabled?: boolean;
+  uaeStatEnabled?: boolean;
 }
 
 // ---------- Phase 3: truth + economic engine (backend-only data) ----------
@@ -388,11 +390,13 @@ export interface ProviderInfo {
   name: string;
   dataset: string;
   authentication: string;
-  status: "available" | "offline" | "error" | "disabled" | "unknown";
+  status: "available" | "offline" | "error" | "disabled" | "unknown" | "import";
+  mode?: "LIVE_API" | "AVAILABLE_IMPORT" | "MANUAL";
+  liveApi?: string | null;
   detail: string;
   enabled: boolean;
   storedObservations: number;
-  indicators: { code: string; name: string; unit: string; kind: string; precisionNote: string }[];
+  indicators: { code: string; name: string; unit: string; kind: string; precisionNote: string; dims?: string[] }[];
   lastSync: { at: string; status: string; summary: Record<string, unknown> } | null;
 }
 
@@ -443,3 +447,89 @@ export interface VerifiedEconomics {
   note: string;
   years: { year: number; currency: string; country: string | null; nominalHousehold: string; nominalIsPrototype: true; real: string | null; usd: string | null; missing: string[] }[];
 }
+
+// ---------- Phase 4: labour evidence (backend-only data) ----------
+export type LifeStageKey = "birth-family" | "education" | "first-employment" | "migration-wage" | "housing" | "retirement";
+export const LIFE_STAGES: { key: LifeStageKey; label: string }[] = [
+  { key: "birth-family", label: "Birth / family economy" },
+  { key: "education", label: "Education" },
+  { key: "first-employment", label: "First employment" },
+  { key: "migration-wage", label: "Migration wage" },
+  { key: "housing", label: "Housing" },
+  { key: "retirement", label: "Retirement" },
+];
+
+export interface WageObservation {
+  id: string; externalObservationId: string; provider: string; country: string; region: string | null; year: number; period: string; frequency: string;
+  statisticType: "MEAN" | "MEDIAN" | "DISTRIBUTION" | "OTHER"; payPeriod: string; value: string | null; currency: string | null; nominalOrReal: string;
+  grossOrNet: "GROSS" | "NET" | "UNKNOWN"; employeeScope: string | null; occupationCode: string | null; occupationLabel: string | null;
+  occupationClassification: string | null; industryCode: string | null; industryLabel: string | null; industryClassification: string | null;
+  educationCode: string | null; educationLabel: string | null; educationClassification: string | null; sex: string | null; ageGroup: string | null;
+  ruralUrban: string | null; citizenship: string | null; migrantStatus: string | null; formalInformal: string | null; employmentStatus: string | null;
+  fullPartTime: string | null; sourcePopulation: string; surveyName: string | null; confidence: string; notes: string; retrievedAt?: string | null;
+}
+
+export interface WageDistribution {
+  id: string; provider: string; dataset: string; country: string; year: number; metric: string; payPeriod: string; currency: string | null;
+  dimensions: Record<string, string>; sourceOrganization: string; sourceUrl: string; yearDistance?: number;
+  bins: { lowerBound: string | null; upperBound: string | null; openLower: boolean; openUpper: boolean; count: string | null; share: string | null; unit: string; currency: string | null }[];
+}
+
+export interface EconomicProfile {
+  id: string; episodeId: string; lifeStage: LifeStageKey; lifeStageLabel: string; targetYear: number; yearStart: number; yearEnd: number;
+  country: string; region: string; urbanRural: "" | "URBAN" | "RURAL"; educationLevel: "" | "LTB" | "BAS" | "INT" | "ADV"; occupation: string;
+  occupationCode: string; occupationClassification: "ISCO-08" | "ISCO-88"; industry: string; industryCode: string;
+  employmentStatus: "" | "EMPLOYEE" | "SELF_EMPLOYED" | "EMPLOYER" | "UNPAID" | "UNKNOWN"; formalInformal: "" | "FORMAL" | "INFORMAL";
+  yearsExperience: number | null; age: number | null; sex: "" | "MALE" | "FEMALE"; citizenship: "" | "NATIONAL" | "NON_NATIONAL";
+  migrantStatus: string; employmentSector: string; notes: string;
+}
+export type EconomicProfileInput = Omit<EconomicProfile, "id" | "episodeId" | "lifeStageLabel">;
+
+export interface MatchCandidate {
+  wage: WageObservation; score: number; breakdown: { dimension: string; points: number; max: number; note: string }[];
+  yearDistance: number; sourceYear: number; targetYear: number; countryMatch: boolean; label: string;
+  review: { decision: "rejected" | "flagged"; note: string } | null;
+}
+export interface CandidateResult { profile: EconomicProfile; candidates: MatchCandidate[]; totalConsidered: number; distributions: WageDistribution[]; note: string }
+
+export interface EconomicBaseline {
+  id: string; episodeId: string; profileId: string | null; lifeStage: LifeStageKey; lifeStageLabel: string; yearStart: number; yearEnd: number;
+  employmentType: string; occupation: string; baselineType: "FACT_SUPPORTED" | "ASSUMPTION" | "DERIVED"; estimateKind: "POINT" | "RANGE" | "DISTRIBUTION";
+  low: string | null; high: string | null; point: string | null; currency: string; payPeriod: string; grossOrNet: string;
+  annualization: { method: string; assumptions: Record<string, unknown>; low: string | null; high: string | null; point: string | null } | null;
+  confidence: "HIGH" | "MEDIUM" | "LOW" | "INSUFFICIENT_DATA"; confidenceReasons: string[]; reasoning: string;
+  evidence: { wageObservationId: string; observationId: string; factId: string; score: number; yearDistance: number; sourceYear: number; value: string; population: string; derivedFactId?: string; derivedValue?: string }[];
+  sourceFactIds: string[]; derivedCalculationIds: string[]; assumptionFactId: string | null; userApproved: boolean; approvedAt: string | null;
+  createdAt: string; pinnedInSnapshot: string | null;
+  prototypeIncome: { isPrototype: true; note: string; years: { year: number; income: number; spouseIncome: number; currency: string }[] };
+}
+export interface BaselineInput {
+  profileId?: string | null; lifeStage: LifeStageKey; yearStart: number; yearEnd: number; baselineType: EconomicBaseline["baselineType"];
+  wageObservationIds?: string[]; adjustToYear?: number | null; low?: string; high?: string; point?: string; currency?: string; payPeriod?: string;
+  reasoning?: string; occupation?: string; annualization?: { assumptions: Record<string, string> } | null;
+}
+
+export interface EvidenceGap {
+  id: string; episodeId: string; gapKey: string; title: string; reason: string; category: string; country: string; yearStart: number; yearEnd: number;
+  priority: "HIGH" | "MEDIUM" | "LOW"; status: "open" | "resolved"; auto: boolean; researchTaskId: string | null; createdAt: string;
+}
+export interface Readiness { stages: { stage: LifeStageKey; label: string; status: "READY" | "PARTIAL" | "MISSING"; reasons: string[] }[]; overall: number; note: string }
+
+export interface ImportPreview {
+  rowsDetected: number; valid: number; invalid: number; duplicates: number; changed: number; errors: string[]; template: string[]; imported?: number;
+  rows: { line: number; status: "valid" | "invalid" | "duplicate" | "changed"; errors: string[]; data: Record<string, string> }[];
+}
+
+export interface Household {
+  id: string; episodeId: string; label: string; yearStart: number; yearEnd: number;
+  members: { id: string; role: string; name: string; employmentKind: string }[];
+  streams: { id: string; memberId: string | null; kind: string; yearStart: number; yearEnd: number; low: string | null; high: string | null; currency: string | null; payPeriod: string | null; basis: string; baselineId: string | null; factId: string | null; notes: string }[];
+}
+
+export interface DatasetSnapshot {
+  id: string; episodeId: string; name: string; status: "draft" | "final"; version: number; parentId: string | null; notes: string; createdAt: string;
+  finalizedAt: string | null; contentHash: string | null; intact: boolean | null;
+  counts: { facts: number; verifiedFacts: number; assumptions: number; derived: number; observations: number; observationsByProvider: Record<string, number>; baselines: number; approvedBaselines: number };
+}
+export interface SnapshotDiffItem { kind: "added" | "removed" | "changed" | "unchanged"; id: string; label: string; old?: string; new?: string }
+export interface SnapshotDiff { from: DatasetSnapshot; to: DatasetSnapshot; observations: SnapshotDiffItem[]; facts: SnapshotDiffItem[]; baselines: SnapshotDiffItem[] }

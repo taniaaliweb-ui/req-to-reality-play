@@ -33,6 +33,24 @@ export const getIntegrations = (mode: DataMode, apiUrl: string, hermesUrl: strin
       description: wb ? `World Development Indicators · ${wb.storedObservations} values stored locally` : "World Development Indicators (no API key).",
     },
   ];
+  const prov = (id: string, name: string, fallback: string): Integration => {
+    const p = providers?.find((x) => x.id === id);
+    if (!online) return { name, status: "disabled", label: "Needs backend", description: fallback };
+    if (!p) return { name, status: "checking", label: "Checking…", description: fallback };
+    if (p.status === "import") return { name, status: "local", label: "Manual import", description: `${p.detail} · ${p.storedObservations} values stored` };
+    return {
+      name, status: p.status === "available" ? "online" : p.status === "disabled" ? "disabled" : "offline",
+      label: p.status === "available" ? "Available" : p.status === "disabled" ? "Disabled" : p.status === "offline" ? "Offline" : "Error",
+      description: `${p.dataset} · ${p.storedObservations} values stored${p.detail ? ` · ${p.detail}` : ""}`,
+    };
+  };
+  engines.push(
+    prov("ilostat", "ILOSTAT Provider", "Official ILO SDMX web service (free, no key)."),
+    prov("uae-fcsc", "UAE Official Statistics", "FCSC .Stat — structured file import."),
+    prov("india-mospi", "India MoSPI", "PLFS tables — structured CSV import."),
+    { name: "Labor Evidence Engine", status: online ? "online" : mode === "local" ? "disabled" : "offline", label: online ? "Online" : mode === "local" ? "Needs backend" : "Offline", description: "Deterministic evidence matching, baselines, gaps (no AI)." },
+    { name: "Dataset Snapshot Engine", status: online ? "online" : mode === "local" ? "disabled" : "offline", label: online ? "Online" : mode === "local" ? "Needs backend" : "Offline", description: "Immutable, versioned, hash-verified evidence snapshots." },
+  );
   return [
     backend,
     database,
@@ -43,6 +61,6 @@ export const getIntegrations = (mode: DataMode, apiUrl: string, hermesUrl: strin
     { name: "Story Worker", status: "not-configured", label: "Not configured", description: "Drafts chapters from timeline + facts." },
     { name: "Audit Worker", status: "not-configured", label: "Not configured", description: "Semantic audits beyond deterministic rules." },
     { name: "MCP Server", status: "disabled", label: "Disabled", description: "Tool access for datasets & calculators." },
-    { name: "Simulation Engine", status: "not-configured", label: "Prototype only", description: "Life-event simulation not implemented; branches are hand-entered demo values." },
+    { name: "Simulation Engine", status: "not-configured", label: "Not implemented", description: "Life-event simulation not implemented; branches are hand-entered demo values." },
   ];
 };

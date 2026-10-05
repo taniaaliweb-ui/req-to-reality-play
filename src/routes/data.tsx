@@ -98,7 +98,7 @@ function DataSources() {
       <PageHeader eyebrow="System · Truth engine" title="Data Sources" description="Authoritative statistics are retrieved by the backend, stored locally in SQLite, and stay available offline." />
 
       <div className="mb-6 grid grid-cols-2 gap-4">
-        {(providers ?? []).map((p) => (
+        {(providers ?? []).filter((p) => p.id === "world-bank" || p.id === "manual").map((p) => (
           <div key={p.id} className="panel p-4 text-sm">
             <div className="flex items-center gap-2">
               <Database className="h-4 w-4" />
@@ -159,7 +159,7 @@ function DataSources() {
             <select aria-label="Filter country" className="input w-28 py-1" value={filter.country} onChange={(e) => setFilter({ ...filter, country: e.target.value })}><option value="">All</option>{countries.map((c) => <option key={c}>{c}</option>)}</select>
             <select aria-label="Filter indicator" className="input w-40 py-1" value={filter.indicator} onChange={(e) => setFilter({ ...filter, indicator: e.target.value })}><option value="">All series</option>{SERIES.map((s) => <option key={s.code} value={s.code}>{s.code}</option>)}</select>
             <button className="btn" disabled={!active || sel.size === 0} onClick={() => void addToLedger()}><Plus className="h-3.5 w-3.5" /> Add {sel.size || ""} to Fact Ledger</button>
-            <button className="btn-ghost" disabled={!active} onClick={() => void pin()}>Pin snapshot</button>
+            <button className="btn-ghost" disabled={!active} onClick={() => void pin()}>Pin snapshot (final)</button>
           </div>
         </div>
         {notice && <div className="border-b border-border bg-pass/5 px-4 py-2 text-xs text-pass">{notice}</div>}

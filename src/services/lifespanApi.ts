@@ -5,7 +5,7 @@
 //   VITE_LIFESPAN_DATA_MODE=local     -> LocalLifespanApi, browser storage (prototype/debug; default)
 //   VITE_LIFESPAN_API_URL=http://127.0.0.1:8000
 // In backend mode there is NO silent fallback to browser storage.
-import type { AuditResult, EngineResult, ExternalObservation, LifespanDB, LineageNode, ProviderInfo, SyncReport, VerifiedEconomics } from "@/types/lifespan";
+import type { AuditResult, BaselineInput, CandidateResult, DatasetSnapshot, EconomicBaseline, EconomicProfile, EconomicProfileInput, EngineResult, EvidenceGap, ExternalObservation, Household, ImportPreview, LifespanDB, LineageNode, ProviderInfo, Readiness, SnapshotDiff, SyncReport, VerifiedEconomics, WageDistribution, WageObservation } from "@/types/lifespan";
 import { buildDemoDB } from "@/mock/demoEpisode";
 import { diffWorkspace, type SyncOp } from "./sync";
 
@@ -35,6 +35,43 @@ export interface LifespanApi {
   getAudits(episodeId: string): Promise<AuditResult[] | null>;
   importWorkspace(db: LifespanDB, overwrite: boolean): Promise<ImportReport>;
   truth: TruthApi;
+  labor: LaborApi;
+}
+
+export type ImportProvider = "manual" | "india-mospi" | "uae-fcsc";
+/** Labour evidence, baselines and dataset snapshots (Phase 4). Backend only. */
+export interface LaborApi {
+  syncIlostat(req: { indicators: string[]; countries: string[]; yearStart: number; yearEnd: number }): Promise<SyncReport>;
+  wageObservations(filter?: Record<string, string | number | undefined>): Promise<WageObservation[]>;
+  distributions(country?: string): Promise<WageDistribution[]>;
+  importPreview(provider: ImportProvider, csv: string): Promise<ImportPreview>;
+  importCommit(provider: ImportProvider, csv: string): Promise<ImportPreview>;
+  profiles(episodeId: string): Promise<EconomicProfile[]>;
+  createProfile(episodeId: string, p: EconomicProfileInput): Promise<EconomicProfile>;
+  updateProfile(id: string, p: EconomicProfileInput): Promise<EconomicProfile>;
+  deleteProfile(id: string): Promise<void>;
+  candidates(profileId: string, limit?: number): Promise<CandidateResult>;
+  review(profileId: string, wageObservationId: string, decision: "rejected" | "flagged" | "clear", note?: string): Promise<unknown>;
+  baselines(episodeId: string): Promise<EconomicBaseline[]>;
+  createBaseline(episodeId: string, b: BaselineInput): Promise<EconomicBaseline>;
+  approveBaseline(id: string, approved: boolean): Promise<EconomicBaseline>;
+  deleteBaseline(id: string): Promise<void>;
+  gaps(episodeId: string): Promise<EvidenceGap[]>;
+  detectGaps(episodeId: string): Promise<EvidenceGap[]>;
+  gapToTask(gapId: string): Promise<{ taskId: string; gap: EvidenceGap }>;
+  readiness(episodeId: string): Promise<Readiness>;
+  households(episodeId: string): Promise<Household[]>;
+  createHousehold(episodeId: string, h: { label: string; yearStart: number; yearEnd: number; members: { role: string; name?: string; employmentKind?: string }[] }): Promise<Household>;
+  addStream(householdId: string, s: Record<string, unknown>): Promise<Household>;
+  deleteStream(id: string): Promise<void>;
+  snapshots(episodeId: string): Promise<DatasetSnapshot[]>;
+  createSnapshot(episodeId: string, name: string, notes?: string): Promise<DatasetSnapshot>;
+  finalizeSnapshot(id: string): Promise<DatasetSnapshot>;
+  refreshSnapshot(id: string): Promise<DatasetSnapshot>;
+  newSnapshotVersion(id: string): Promise<DatasetSnapshot>;
+  deleteSnapshot(id: string): Promise<void>;
+  snapshotDetail(id: string): Promise<DatasetSnapshot & { facts: Record<string, unknown>[]; observations: Record<string, unknown>[]; baselines: EconomicBaseline[] }>;
+  diffSnapshots(a: string, b: string): Promise<SnapshotDiff>;
 }
 
 export interface InflationRequest { episodeId?: string | undefined; country: string; amount: string; sourceYear: number; targetYear: number; currency?: string; save: boolean }
@@ -58,6 +95,7 @@ const LOCAL_TRUTH: TruthApi = {
   providers: backendOnly, syncWorldBank: backendOnly, observations: backendOnly, factsFromObservations: backendOnly,
   inflationAdjust: backendOnly, currencyConvert: backendOnly, lineage: backendOnly, verifiedEconomics: backendOnly, pinSnapshot: backendOnly,
 };
+const LOCAL_LABOR = new Proxy({}, { get: () => backendOnly }) as LaborApi;
 
 /** Thrown when the backend cannot be reached at all. */
 export class BackendUnavailableError extends Error {
@@ -78,6 +116,7 @@ export const LOCAL_STORAGE_KEY = "lifespan.db.v1";
 export class LocalLifespanApi implements LifespanApi {
   readonly mode = "local" as const;
   readonly truth = LOCAL_TRUTH;
+  readonly labor = LOCAL_LABOR;
 
   async load(): Promise<LifespanDB> {
     return readLocalWorkspace() ?? buildDemoDB();
@@ -118,8 +157,46 @@ export function readLocalWorkspace(): LifespanDB | null {
 export class HttpLifespanApi implements LifespanApi {
   readonly mode = "backend" as const;
   readonly truth: TruthApi;
+  readonly labor: LaborApi;
   constructor(private baseUrl: string) {
     const enc = encodeURIComponent;
+    const qs = (f: Record<string, string | number | undefined> = {}) => {
+      const q = new URLSearchParams(Object.entries(f).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)])).toString();
+      return q ? `?${q}` : "";
+    };
+    this.labor = {
+      syncIlostat: (req) => this.req("POST", "/data/ilostat/sync", req),
+      wageObservations: (f) => this.req("GET", `/labor/wage-observations${qs(f)}`),
+      distributions: (country) => this.req("GET", `/labor/distributions${qs({ country })}`),
+      importPreview: (provider, csv) => this.req("POST", "/labor/import/preview", { provider, csv }),
+      importCommit: (provider, csv) => this.req("POST", "/labor/import/commit", { provider, csv }),
+      profiles: (eid) => this.req("GET", `/episodes/${enc(eid)}/economic-profiles`),
+      createProfile: (eid, p) => this.req("POST", `/episodes/${enc(eid)}/economic-profiles`, p),
+      updateProfile: (id, p) => this.req("PUT", `/economic-profiles/${enc(id)}`, p),
+      deleteProfile: (id) => this.req("DELETE", `/economic-profiles/${enc(id)}`),
+      candidates: (pid, limit = 25) => this.req("GET", `/economic-profiles/${enc(pid)}/candidates?limit=${limit}`),
+      review: (pid, wageObservationId, decision, note = "") => this.req("POST", `/economic-profiles/${enc(pid)}/reviews`, { wageObservationId, decision, note }),
+      baselines: (eid) => this.req("GET", `/episodes/${enc(eid)}/baselines`),
+      createBaseline: (eid, b) => this.req("POST", `/episodes/${enc(eid)}/baselines`, b),
+      approveBaseline: (id, approved) => this.req("POST", `/baselines/${enc(id)}/approve?approved=${approved}`),
+      deleteBaseline: (id) => this.req("DELETE", `/baselines/${enc(id)}`),
+      gaps: (eid) => this.req("GET", `/episodes/${enc(eid)}/evidence-gaps`),
+      detectGaps: (eid) => this.req("POST", `/episodes/${enc(eid)}/evidence-gaps/detect`),
+      gapToTask: (gid) => this.req("POST", `/evidence-gaps/${enc(gid)}/research-task`),
+      readiness: (eid) => this.req("GET", `/episodes/${enc(eid)}/readiness`),
+      households: (eid) => this.req("GET", `/episodes/${enc(eid)}/households`),
+      createHousehold: (eid, h) => this.req("POST", `/episodes/${enc(eid)}/households`, h),
+      addStream: (hid, st) => this.req("POST", `/households/${enc(hid)}/streams`, st),
+      deleteStream: (id) => this.req("DELETE", `/income-streams/${enc(id)}`),
+      snapshots: (eid) => this.req("GET", `/episodes/${enc(eid)}/snapshots`),
+      createSnapshot: (eid, name, notes = "") => this.req("POST", `/episodes/${enc(eid)}/snapshots`, { name, notes }),
+      finalizeSnapshot: (id) => this.req("POST", `/snapshots/${enc(id)}/finalize`),
+      refreshSnapshot: (id) => this.req("POST", `/snapshots/${enc(id)}/refresh`),
+      newSnapshotVersion: (id) => this.req("POST", `/snapshots/${enc(id)}/new-version`),
+      deleteSnapshot: (id) => this.req("DELETE", `/snapshots/${enc(id)}`),
+      snapshotDetail: (id) => this.req("GET", `/snapshots/${enc(id)}`),
+      diffSnapshots: (a, b) => this.req("GET", `/snapshots/diff${qs({ a, b })}`),
+    };
     this.truth = {
       providers: (check = false) => this.req("GET", `/data/providers${check ? "?check=true" : ""}`),
       syncWorldBank: (req) => this.req("POST", "/data/world-bank/sync", req),

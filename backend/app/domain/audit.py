@@ -138,6 +138,8 @@ def run_audits(db: Session, episode_id: str) -> list[dict]:
     if calcs and not (no_lineage or bad_infl or cross or changed):
         push("Economic", "PASS", f"{len(calcs)} derived value(s) have complete lineage", "Every saved calculation has its inputs, formula and engine version.")
 
+    _labour_audits(db, episode_id, facts, push)
+
     push("Historical", "WARNING", "Historical consistency not yet verified", "Requires Audit Worker + dated event datasets (later phase).", automated=False)
     cultural = [f for f in facts if f.category == "Social environment" and f.fact_type == "ASSUMPTION"]
     push("Bias", "WARNING" if cultural else "PASS",
@@ -145,3 +147,71 @@ def run_audits(db: Session, episode_id: str) -> list[dict]:
          "Social-environment assumptions require sourced justification. Full bias review needs human + Audit Worker.",
          [f.id for f in cultural])
     return out
+
+
+def _labour_audits(db: Session, episode_id: str, facts: list, push) -> None:
+    """Phase 4 labour-evidence rules (backend only: these records do not exist in local mode)."""
+    from app.services import snapshots as snaps
+    wage_re = re.compile(r"salary|wage|earning|income", re.I)
+    bad_salary = [f.id for f in facts if f.fact_type == "FACT" and f.category in ("Employment", "Migration") and wage_re.search(f.metric or "")
+                  and not f.external_observation_id and not f.is_prototype]
+    if bad_salary:
+        push("Fact", "FAIL", "Salary marked FACT without a matching wage observation", "A wage FACT must point at a stored source statistic; character salaries are ASSUMPTION or DERIVED.", bad_salary)
+    fact_by_id = {f.id: f for f in facts}
+    bls = list(db.scalars(select(m.EconomicBaseline).where(m.EconomicBaseline.episode_id == episode_id)))
+    profiles = {p.id: p for p in db.scalars(select(m.CharacterEconomicProfile).where(m.CharacterEconomicProfile.episode_id == episode_id))}
+    outside, net_bad, annual_bad, far, no_cpi, proto, unpinned, revised = [], [], [], [], [], [], [], []
+    final_ids = {sb.economic_baseline_id for sb in db.scalars(select(m.SnapshotBaseline).join(m.EpisodeDatasetSnapshot, m.EpisodeDatasetSnapshot.id == m.SnapshotBaseline.snapshot_id)
+                                                                .where(m.EpisodeDatasetSnapshot.status == "final"))}
+    for b in bls:
+        pr = profiles.get(b.profile_id)
+        for ev in b.evidence or []:
+            w = db.get(m.WageObservation, ev.get("wageObservationId"))
+            if w is None:
+                continue
+            if pr and b.baseline_type != "ASSUMPTION" and ((pr.fields.get("employmentStatus") == "SELF_EMPLOYED" and w.employment_status == "EMPLOYEE")
+                                                           or (pr.fields.get("country") and pr.fields["country"] != w.country)):
+                outside.append(b.id)
+            if ev.get("yearDistance", 0) > 3:
+                far.append(b.id)
+            o = db.get(m.ExternalObservation, ev.get("observationId"))
+            if b.user_approved and o is not None and b.id not in final_ids and ev.get("observationUpdatedAt") and o.updated_at != ev["observationUpdatedAt"]:
+                revised.append(b.id)
+        if b.gross_or_net == "NET" and any((db.get(m.WageObservation, ev.get("wageObservationId")) or m.WageObservation(gross_or_net="UNKNOWN")).gross_or_net != "NET" for ev in b.evidence or []):
+            net_bad.append(b.id)
+        if b.pay_period != "ANNUAL" and b.annualization is not None and not b.annualization.get("method"):
+            annual_bad.append(b.id)
+        if b.pay_period == "ANNUAL" and any((ev.get("statisticType") and ev.get("payPeriod", "ANNUAL") != "ANNUAL") for ev in b.evidence or []) and not b.annualization:
+            annual_bad.append(b.id)
+        if b.baseline_type == "DERIVED" and not b.derived_calculation_ids:
+            no_cpi.append(b.id)
+        if b.baseline_type != "ASSUMPTION" and any(fact_by_id.get(fid) is not None and fact_by_id[fid].is_prototype for fid in b.source_fact_ids or []):
+            proto.append(b.id)
+        if b.user_approved and b.id not in final_ids:
+            unpinned.append(b.id)
+    def u(x):
+        return sorted(set(x))
+    if outside:
+        push("Economic", "WARNING", "Wage evidence used outside its source population", "Evidence population (country / employee status) differs from the character without an explicit assumption.", u(outside))
+    if net_bad:
+        push("Economic", "FAIL", "Gross or unknown wage presented as take-home income", "LifeSpan does not compute net pay yet; never label gross/unknown earnings as net.", u(net_bad))
+    if annual_bad:
+        push("Economic", "FAIL", "Wage converted to annual without documented method", "Annualization must record its formula and explicit working-time assumptions.", u(annual_bad))
+    if far:
+        push("Economic", "WARNING", "Wage evidence year differs substantially from target", "Evidence more than 3 years away from the life stage it supports.", u(far))
+    if no_cpi:
+        push("Economic", "FAIL", "Derived inflation-adjusted wage missing CPI lineage", "A DERIVED baseline must reference its stored CPI calculations.", u(no_cpi))
+    if proto:
+        push("Economic", "FAIL", "Prototype income used as verified baseline", "PROTOTYPE figures cannot support a fact-supported or derived baseline.", u(proto))
+    if revised:
+        push("Economic", "FAIL", "Simulation-ready baseline references mutable, unpinned data", "Evidence changed after approval and the baseline is not pinned in a finalized snapshot.", u(revised))
+    elif unpinned:
+        push("Economic", "WARNING", "Approved baseline not yet pinned", "Finalize a dataset snapshot so future simulations use frozen evidence.", u(unpinned))
+    tampered = []
+    for s in db.scalars(select(m.EpisodeDatasetSnapshot).where(m.EpisodeDatasetSnapshot.episode_id == episode_id, m.EpisodeDatasetSnapshot.status == "final")):
+        if s.content_hash and snaps.content_hash(db, s.id) != s.content_hash:
+            tampered.append(s.id)
+    if tampered:
+        push("Economic", "FAIL", "Finalized dataset snapshot modified", "Snapshot contents no longer match the hash recorded when it was finalized.", tampered)
+    if bls and not (outside or net_bad or annual_bad or no_cpi or proto or revised or tampered):
+        push("Economic", "PASS", f"{len(bls)} economic baseline(s) pass labour-evidence rules", "Evidence, lineage and labelling checks passed.")
