@@ -19,6 +19,7 @@ const statusCls: Record<string, string> = {
   NOT_READY: "border-fail/60 bg-fail/10 text-fail", NOT_APPLICABLE: "border-border text-muted-foreground",
 };
 const covCls: Record<Coverage, string> = { DIRECT: "bg-pass", NEARBY: "bg-pass/50", DERIVED: "bg-primary/60", ASSUMED: "bg-warn", MISSING: "bg-fail/70" };
+const g = (o: unknown, k: string) => String((o as Record<string, unknown>)[k] ?? "");
 const label = (s: string) => (s === "NOT_APPLICABLE" ? "n/a" : s.replace("_", " "));
 
 function Chip({ s }: { s: string }) {
@@ -162,7 +163,7 @@ function LifeEvidence() {
                         <div className="text-[10px] text-muted-foreground">{o.provider} · Evidence Match Score {o.match?.score}/100 (not a probability) · population statistic</div>
                       </>
                     ) : (
-                      <div>{String((o as Record<string, unknown>).name ?? (o as Record<string, unknown>).label ?? o.id)} {(o as Record<string, unknown>).relevance ? <span className="text-muted-foreground">· {String((o as Record<string, unknown>).relevance)} · {String((o as Record<string, unknown>).reason)} · {String((o as Record<string, unknown>).verification ?? "")}</span> : null}</div>
+                      <div>{g(o, "name") || g(o, "label") || g(o, "id")} {g(o, "relevance") && <span className="text-muted-foreground">· {g(o, "relevance")} · {g(o, "reason")} · {g(o, "verification")}</span>}</div>
                     )}
                   </li>
                 ))}
@@ -177,7 +178,7 @@ function LifeEvidence() {
               {!!cell.extra?.length && (
                 <>
                   <h4 className="mb-1 mt-3 text-xs font-semibold uppercase tracking-wide">Policy / context / baselines</h4>
-                  <ul className="text-xs">{cell.extra.map((x, i) => <li key={i}><span className="chip mr-1 text-[10px]">{String(x.type)}</span>{String(x.title ?? x.claim ?? x.id)} {x.verification ? <span className="text-muted-foreground">({String(x.verification)})</span> : null}</li>)}</ul>
+                  <ul className="text-xs">{cell.extra.map((x, i) => <li key={i}><span className="chip mr-1 text-[10px]">{g(x, "type")}</span>{g(x, "title") || g(x, "claim") || g(x, "id")} {g(x, "verification") && <span className="text-muted-foreground">({g(x, "verification")})</span>}</li>)}</ul>
                 </>
               )}
             </div>
