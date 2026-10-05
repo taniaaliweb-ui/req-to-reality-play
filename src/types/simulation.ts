@@ -62,3 +62,13 @@ export interface ProductionResult {
 }
 export type Receipt2 = Record<string, unknown> & { provenance: Record<string, unknown>; label: string };
 export interface Candidate { id: string; claim: string; value: string; unit: string; source: string; status: string; submittedBy: string; createdAt: string }
+export interface DashboardData {
+  snapshot: { id: string; label: string } | null;
+  simulationRuns: { total: number; batch: number; branches: number };
+  canonical: { id: string; deathAge: number | null; stale: boolean } | null;
+  economicOutcome: { netWorthAtDeath: Money; position: string | null } | null;
+  audit: { errors: number; warnings: number } | null;
+  story: { chapters: number; beats: number } | null;
+  production: { scenes: number; edited: boolean } | null;
+  researchGaps: number;
+}

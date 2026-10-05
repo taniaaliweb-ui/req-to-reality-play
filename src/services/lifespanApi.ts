@@ -8,7 +8,7 @@
 import type { AssumptionInput, AssumptionRecord, ContextRec, HistoricalEventRec, LifeImportPreview, LifeMatrix, LifeObservation, LifeObsSummary, MatrixCell, MatrixStage, MigrationPathEvidence, PolicyRec, ReadinessV2, SnapshotManifest, AuditResult, BaselineInput, CandidateResult, DatasetSnapshot, EconomicBaseline, EconomicProfile, EconomicProfileInput, EngineResult, EvidenceGap, ExternalObservation, Household, ImportPreview, LifespanDB, LineageNode, ProviderInfo, Readiness, SnapshotDiff, SyncReport, VerifiedEconomics, WageDistribution, WageObservation } from "@/types/lifespan";
 import { buildDemoDB } from "@/mock/demoEpisode";
 import { diffWorkspace, type SyncOp } from "./sync";
-import type { CanonicalStatus, Candidate, InputReview, ProductionResult, Receipt2, SimEvent, SimInput, SimJob, SimPrior, SimRun, SimState, StoryResult } from "@/types/simulation";
+import type { CanonicalStatus, Candidate, DashboardData, InputReview, ProductionResult, Receipt2, SimEvent, SimInput, SimJob, SimPrior, SimRun, SimState, StoryResult } from "@/types/simulation";
 
 export type DataMode = "local" | "backend";
 
@@ -69,7 +69,7 @@ export interface SimApi {
   saveScript(episodeId: string, script: string): Promise<ProductionResult>;
   receipt(episodeId: string): Promise<Receipt2>;
   appendix(episodeId: string): Promise<Record<string, Record<string, unknown>[]>>;
-  dashboard(episodeId: string): Promise<Record<string, any>>;
+  dashboard(episodeId: string): Promise<DashboardData>;
   exportArchive(episodeId: string): Promise<Record<string, unknown>>;
   importArchive(archive: Record<string, unknown>): Promise<{ episodeId: string; counts: Record<string, number>; note: string }>;
   exportUrl(episodeId: string, kind: "ledger.csv" | "story.md" | "printable.html"): string;
