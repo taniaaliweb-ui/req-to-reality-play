@@ -55,7 +55,6 @@ def production(db: Session, eid: str, regenerate: bool = False) -> dict:
     st = story(db, eid)
     a = _artifact(db, eid, "production")
     if a is None or a.run_id != r.id or regenerate:
-        tl = {e.simulation_run_id and e.id.rsplit("-", 1)[0]: None for e in []}
         tl = {f"{r.id}:{e.id.rsplit('-', 1)[1]}": e.id for e in db.scalars(select(m.TimelineEvent).where(m.TimelineEvent.simulation_run_id == r.id))}
         a = _save(db, eid, r.id, "production", eng.production(st, sim_run.run_out(r), states, tl))
     p = a.payload
