@@ -1,4 +1,4 @@
-# LifeSpan — Phase 2 (real local backend)
+# LifeSpan — Phase 3 (truth + deterministic economic engine)
 
 Research workstation for historically grounded life simulations.
 
@@ -8,7 +8,12 @@ Browser (http://127.0.0.1:3000)
                                                                           └─ SQLite: backend/data/lifespan.db
 ```
 
-No AI, Hermes, MCP, real research or real simulation is connected yet. All demo figures are **PROTOTYPE DATA**.
+Phase 3 adds real World Bank CPI and annual-average exchange-rate data, a deterministic economic engine, and full calculation lineage. No AI, Hermes, MCP or real life simulation is connected yet. All demo-life figures remain **PROTOTYPE DATA**.
+
+```text
+World Bank API → backend provider → external_observations (SQLite) → Fact Ledger (FACT, verified)
+   → economic_engine (Decimal, versioned formula) → DERIVED fact + derived_calculations + calculation_inputs
+```
 
 ---
 
@@ -62,7 +67,17 @@ VITE_LIFESPAN_API_URL=http://127.0.0.1:8000
 ```
 In backend mode an unreachable backend shows **"LifeSpan backend unavailable"** — the app never silently falls back to browser storage.
 
-### Moving Phase 1 browser data
+#### Truth + economic engine (Phase 3)
+- **Providers** (`backend/app/providers/`): `world_bank.py` (Indicators API v2, no key), `manual.py` (values entered with a named source). Indicator registry: `FP.CPI.TOTL`, `FP.CPI.TOTL.ZG`, `PA.NUS.FCRF` — add more in `INDICATORS`.
+- **Data Sources page**: fetch series for countries/years; shows retrieved vs unavailable counts. Missing years are reported, never filled in. Stored values work offline and show their retrieval date. Re-fetching keeps a revision record when a value changes.
+- **Economic Ledger**: inflation adjustment (`amount × CPI_target ÷ CPI_source`, same country only) and historical currency conversion (USD bridge, annual-average rates — never shown as daily rates). "Recalculate verified fields" shows real-terms and USD columns next to the prototype nominal figures without overwriting them.
+- **Fact Ledger**: click a World Bank or derived fact to see Source, Observation, Metadata and Lineage; each calculation is re-run from its stored inputs to prove it reproduces.
+- **Precision**: Python `Decimal`, 28 significant digits; results stored unrounded; rounded (half-even, 2 dp) only for display. Every calculation stores `engine 1.0` and its formula version (`inflation-adjust-v1`, `fx-usd-bridge-annual-avg-v1`).
+- **Audits** add: DERIVED without lineage, verified FACT without source, PROTOTYPE marked verified, missing CPI input, cross-country CPI, unlabeled FX precision, derived value edited after calculation.
+- **Prepared, not populated**: `wage_observations` (no wage provider exists; nothing is inferred from GDP), `episode_dataset_snapshots` ("Pin snapshot" on Data Sources records the exact observation values an episode used).
+- **Settings**: "External data access" and "World Bank provider" switches (backend-enforced).
+
+## Moving Phase 1 browser data
 In backend mode, if this browser still has Phase 1 data, **Settings → Import Local Prototype Data** sends it to the backend (validated, IDs preserved). Existing backend records are only overwritten after confirmation. Browser data is never deleted.
 
 ### Main API (`/api/v1`)
@@ -70,11 +85,15 @@ In backend mode, if this browser still has Phase 1 data, **Settings → Import L
 `GET|POST /episodes` · `GET|PUT|PATCH|DELETE /episodes/{id}` · `GET|PUT /episodes/{id}/character`
 `/episodes/{id}/{research-tasks|facts|timeline|economic-years|simulations|story}` (+ `/{recordId}`: GET/PUT/PATCH/DELETE)
 `GET /episodes/{id}/audits` · `GET /episodes/{id}/receipt` · `/sources` (global registry)
+`GET /data/providers` · `POST /data/world-bank/sync` · `POST /data/manual/observations` · `GET /data/observations`
+`POST /episodes/{id}/facts/from-observations` · `POST /economics/inflation-adjust` · `POST /economics/currency-convert`
+`GET /facts/{id}/lineage` · `GET /episodes/{id}/economics/verified` · `POST|GET /episodes/{id}/dataset-snapshots` · `GET /engine`
 Interactive docs: http://127.0.0.1:8000/docs
 
 ### Backend tests
 ```bash
-cd backend && .venv/bin/python -m pytest
+cd backend && .venv/bin/python -m pytest                          # offline: recorded World Bank responses in tests/fixtures/wb
+cd backend && LIFESPAN_LIVE_TESTS=1 .venv/bin/python -m pytest      # also runs a live World Bank smoke test
 ```
 
 ## Future connections

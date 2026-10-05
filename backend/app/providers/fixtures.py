@@ -24,7 +24,7 @@ def fixture_transport(directory: str) -> httpx.MockTransport:
         if not f.exists():
             return httpx.Response(200, json=[{"message": [{"id": "120", "key": "Invalid value", "value": "The provided parameter value is not valid"}]}])
         data = json.loads(f.read_text())
-        date = request.url.params.get("date")
+        date = request.url.params.get("date")  # raw ":" survives parsing
         if date and len(data) > 1 and isinstance(data[1], list):
             y0, _, y1 = date.partition(":")
             data[1] = [r for r in data[1] if int(y0) <= int(r["date"]) <= int(y1 or y0)]

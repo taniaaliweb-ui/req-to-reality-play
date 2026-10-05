@@ -70,7 +70,7 @@ function Facts() {
                   <td><FactTypeChip t={f.factType} />{f.isPrototype && <div className="mt-0.5 font-mono text-[9px] uppercase tracking-wider text-mock">Prototype</div>}</td>
                   <td className="text-xs text-muted-foreground">{f.category}</td>
                   <td>{f.metric}{f.derivedFrom && <div className="text-[11px] text-derived">↳ {f.derivedFrom}</div>}</td>
-                  <td className="data text-right">{f.value} <span className="text-muted-foreground text-[11px]">{f.unit}</span></td>
+                  <td className="data text-right" title={f.value}>{f.factType === "DERIVED" && /^-?\d+\.\d{3,}$/.test(f.value) ? Number(f.value).toFixed(2) : f.value} <span className="text-muted-foreground text-[11px]">{f.unit}</span></td>
                   <td className="text-xs">{f.country}<div className="text-muted-foreground">{f.region}</div></td>
                   <td className="data text-xs">{f.yearStart === f.yearEnd ? f.yearStart : `${f.yearStart}–${f.yearEnd}`}</td>
                   <td className="data text-xs">{f.provider ? <span className="text-pass">{f.provider === "world-bank" ? "World Bank" : f.provider}<div className="text-muted-foreground">{f.indicatorCode}</div></span> : f.factType === "DERIVED" && f.derivedFrom?.includes("CALC-") ? <span className="text-derived">calculation</span> : f.sourceId ?? <span className="text-fail">none</span>}</td>

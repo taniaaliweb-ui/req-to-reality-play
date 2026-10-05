@@ -75,6 +75,12 @@ function Settings() {
           <p className="text-xs text-muted-foreground">API keys are never stored in the browser. They will live in the backend's environment.</p>
         </section>
         <section className="panel space-y-3 p-5">
+          <div className="eyebrow">External data (backend only)</div>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.externalDataEnabled ?? true} onChange={(e) => set({ externalDataEnabled: e.target.checked })} /> External data access enabled</label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.worldBankEnabled ?? true} onChange={(e) => set({ worldBankEnabled: e.target.checked })} /> World Bank provider enabled <span className="text-xs text-muted-foreground">(no API key needed)</span></label>
+          <p className="text-xs text-muted-foreground">Future provider credentials will live in the backend environment, never in the browser.</p>
+        </section>
+        <section className="panel space-y-3 p-5">
           <div className="eyebrow">Display</div>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.showMockBanners} onChange={(e) => set({ showMockBanners: e.target.checked })} /> Show prototype-data banners</label>
           <Field label="Currency display"><select className="input w-40" value={s.currencyDisplay} onChange={(e) => set({ currencyDisplay: e.target.value as AppSettings["currencyDisplay"] })}><option value="local">Local currency</option><option value="USD">USD (not implemented)</option></select></Field>

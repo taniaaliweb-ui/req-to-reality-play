@@ -41,8 +41,10 @@ export function LifespanProvider({ children }: { children: ReactNode }) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chain = useRef<Promise<void>>(Promise.resolve());
 
+  const loadedOnce = useRef(false);
   const load = useCallback(async () => {
-    setLoadState("loading");
+    // A refresh after first load keeps pages mounted (no full-screen loading state).
+    if (!loadedOnce.current) setLoadState("loading");
     try {
       const loaded = await lifespanApi.load();
       latest.current = loaded;
@@ -51,6 +53,7 @@ export function LifespanProvider({ children }: { children: ReactNode }) {
       const stored = window.localStorage.getItem(ACTIVE_KEY);
       if (stored && loaded.episodes.some((e) => e.id === stored)) setActiveIdState(stored);
       else if (loaded.episodes[0]) setActiveIdState(loaded.episodes[0].id);
+      loadedOnce.current = true;
       setLoadState("ready");
       setSaveState("saved");
     } catch (e) {
@@ -115,9 +118,15 @@ export function LifespanProvider({ children }: { children: ReactNode }) {
     setActiveId(fresh.episodes[0]?.id ?? "");
   }, [setActiveId]);
 
+  // Push pending edits first so a refresh never discards unsaved changes.
+  const refresh = useCallback(async () => {
+    if (loadedOnce.current) await flush();
+    await load();
+  }, [flush, load]);
+
   const value = useMemo<Ctx>(
-    () => ({ db, ready: loadState === "ready", mode, loadState, saveState, saveError, activeId, active: db.episodes.find((e) => e.id === activeId), setActiveId, mutate, syncNow: flush, reload: load, reset }),
-    [db, mode, loadState, saveState, saveError, activeId, setActiveId, mutate, flush, load, reset],
+    () => ({ db, ready: loadState === "ready", mode, loadState, saveState, saveError, activeId, active: db.episodes.find((e) => e.id === activeId), setActiveId, mutate, syncNow: flush, reload: refresh, reset }),
+    [db, mode, loadState, saveState, saveError, activeId, setActiveId, mutate, flush, refresh, reset],
   );
   return <LifespanContext.Provider value={value}>{children}</LifespanContext.Provider>;
 }

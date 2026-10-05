@@ -37,8 +37,8 @@ export interface LifespanApi {
   truth: TruthApi;
 }
 
-export interface InflationRequest { episodeId?: string; country: string; amount: string; sourceYear: number; targetYear: number; currency?: string; save: boolean }
-export interface FxRequest { episodeId?: string; amount: string; year: number; fromCountry: string; toCountry: string; save: boolean }
+export interface InflationRequest { episodeId?: string | undefined; country: string; amount: string; sourceYear: number; targetYear: number; currency?: string; save: boolean }
+export interface FxRequest { episodeId?: string | undefined; amount: string; year: number; fromCountry: string; toCountry: string; save: boolean }
 
 /** Truth + economic engine. All external data is fetched by the backend — never by the browser. */
 export interface TruthApi {

@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : "Request failed.");
 const COUNTRIES = [["IND", "India · INR"], ["ARE", "United Arab Emirates · AED"], ["USA", "United States · USD"]] as const;
 
-function ResultBox({ r, onSaved }: { r: EngineResult; onSaved?: string }) {
+function ResultBox({ r, onSaved }: { r: EngineResult; onSaved?: string | undefined }) {
   return (
     <div className={cn("mt-3 rounded-sm border p-2 text-xs", r.status === "OK" ? "border-derived/50" : "border-warn/60")}>
       <div className="flex items-center gap-2"><span className={cn("chip", r.status === "OK" ? "border-derived text-derived" : "border-warn text-warn")}>{r.status === "OK" ? "DERIVED" : r.status}</span><span className="data text-muted-foreground">{r.formulaVersion} · engine {r.engineVersion}</span></div>

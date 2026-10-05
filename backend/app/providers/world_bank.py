@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import time
 from decimal import Decimal, InvalidOperation
 
 import httpx
@@ -31,13 +32,24 @@ class WorldBankProvider(DataProvider):
     def __init__(self, transport: httpx.BaseTransport | None = None, timeout: float = 15.0):
         self._client = httpx.Client(base_url=BASE_URL, timeout=timeout, transport=transport, follow_redirects=True)
 
-    def _get(self, path: str, params: dict) -> list:
-        try:
-            r = self._client.get(path, params={"format": "json", **params})
-        except httpx.TimeoutException as e:
-            raise ProviderError("timeout", "World Bank API timed out") from e
-        except httpx.HTTPError as e:
-            raise ProviderError("network", f"World Bank API unreachable: {type(e).__name__}") from e
+    def _get(self, path: str, params: dict, attempts: int = 3) -> list:
+        # Build the query by hand: the API rejects a percent-encoded ':' in date ranges (HTTP 502).
+        query = "&".join(f"{k}={v}" for k, v in {"format": "json", **params}.items())
+        r = None
+        for attempt in range(attempts):
+            try:
+                r = self._client.get(f"{path}?{query}")
+            except httpx.TimeoutException as e:
+                if attempt == attempts - 1:
+                    raise ProviderError("timeout", "World Bank API timed out") from e
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            except httpx.HTTPError as e:
+                raise ProviderError("network", f"World Bank API unreachable: {type(e).__name__}") from e
+            if r.status_code < 500 or attempt == attempts - 1:
+                break
+            time.sleep(0.5 * (attempt + 1))  # transient 5xx: retry
+        assert r is not None
         if r.status_code >= 400:
             raise ProviderError("http", f"World Bank API returned HTTP {r.status_code}")
         try:
