@@ -59,8 +59,22 @@ def wage(ctx, st) -> tuple[Decimal, dict | None]:
     return q2(w), ref
 
 
+def dependent(st) -> bool:
+    """Before the first job, while living in the family home, the character is a dependant of the family of origin
+    (outside this ledger): no own income or expenses are booked."""
+    return st["emp"].get("firstJobYear") is None and st["emp"]["state"] in ("child", "student", "unemployed") and st["housing"] == "family_home"
+
+
 def step(ctx, st) -> dict:
     y, cur = st["year"], st["currency"]
+    if dependent(st):
+        st["pending"] = [p for p in st["pending"] if p["type"] not in ("migration_cost",)]
+        z = str(ZERO)
+        return {"currency": cur, "dependent": True, "income": {"wages": z}, "expenses": {}, "gains": {}, "totalIncome": z, "totalExpenses": z, "netIncome": z,
+                "balances": st["acc"], "netWorth": {c: str(q2(nw({k: D(v.get(k, "0")) for k in FIELDS}))) for c, v in st["acc"].items()},
+                "reconciliation": {c: {"opening": "0.00", "income": z, "expenses": z, "gains": z, "transfers": z, "closing": "0.00", "difference": z} for c in st["acc"]},
+                "shortfall": [], "notes": ["Dependant of the family of origin — household of origin not modelled in this ledger"], "householdSize": 1,
+                "subsistenceFloor": z, "wageProvenance": None, "priorIds": [], "assumptionIds": [], "valueStatus": "SIMULATED"}
     accs = _load(st)
     for c in {cur} | {t["currency"] for t in st["transfers"]}:
         accs.setdefault(c, {k: ZERO for k in FIELDS})
@@ -262,6 +276,21 @@ def step(ctx, st) -> dict:
         a["debt"] += borrow
         a["cash"] = ZERO
         shortfall_steps.append(f"borrowed {borrow:.0f}")
+    # credit limit: lenders stop once debt passes the distress threshold → remaining needs go unmet (deprivation)
+    thr = D(str(FN["distressDebtToIncome"])) / D(str(ctx.ctl("downwardRisk")))
+    limit = q2(thr * base * D("1.2"))
+    if a["debt"] > limit and shortfall_steps and shortfall_steps[-1].startswith("borrowed"):
+        unmet = min(a["debt"] - limit, D(shortfall_steps[-1].split()[-1]))
+        a["debt"] -= unmet
+        exp["unaffordedConsumption"] = -unmet
+        total_exp -= unmet
+        shortfall_steps.append(f"credit exhausted: {unmet:.0f} of needs went unmet (deprivation)")
+        if not st["flags"].get("deprivation"):
+            st["flags"]["deprivation"] = True
+            ctx.record(st, "economics", "deprivation", f"Credit exhausted (limit {limit:.0f}); {cur} {unmet:.0f} of household needs could not be paid.",
+                       rule="economics.credit_limit", importance=3, prior_ids=[ctx.pid("P-FINANCE")])
+    elif st["flags"].get("deprivation") and not shortfall_steps:
+        st["flags"]["deprivation"] = False
     # savings allocation
     buffer = q2(total_exp * D("0.5"))
     if a["cash"] > buffer and a["debt"] == 0:
@@ -270,7 +299,6 @@ def step(ctx, st) -> dict:
         a["cash"] -= mv
         a["investments"] += mv
     # distress
-    thr = D(str(FN["distressDebtToIncome"])) / D(str(ctx.ctl("downwardRisk")))
     debt_ratio = (a["debt"] / base) if base > 0 else D(0)
     if debt_ratio > thr:
         st["distressYears"] = st.get("distressYears", 0) + 1
