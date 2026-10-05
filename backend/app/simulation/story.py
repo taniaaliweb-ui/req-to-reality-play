@@ -231,7 +231,7 @@ def story_audit(story: dict, payload: dict, states: list[dict], events: list[dic
             if r.startswith("RUN-") and ":" in r:
                 if r not in ev_ids or not ev_ids[r]["occurred"]:
                     out.append({"ruleId": "contradicts-canonical", "severity": "error", "message": f"{c['id']}: refers to {r}, not an occurred event of the canonical run"})
-                elif ev_ids[r]["year"] != c["year"]:
+                elif ev_ids[r]["year"] != c["year"] and c["type"] == "SIMULATED_EVENT":
                     out.append({"ruleId": "wrong-year", "severity": "error", "message": f"{c['id']}: year differs from event {r}"})
         for n in c["numbers"]:
             if n.replace(",", "") not in allowed:
