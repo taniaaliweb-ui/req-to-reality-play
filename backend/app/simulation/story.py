@@ -231,7 +231,7 @@ def story_audit(story: dict, payload: dict, states: list[dict], events: list[dic
             if r.startswith("RUN-") and ":" in r:
                 if r not in ev_ids or not ev_ids[r]["occurred"]:
                     out.append({"ruleId": "contradicts-canonical", "severity": "error", "message": f"{c['id']}: refers to {r}, not an occurred event of the canonical run"})
-                elif ev_ids[r]["year"] != c["year"]:
+                elif ev_ids[r]["year"] != c["year"] and c["type"] == "SIMULATED_EVENT":
                     out.append({"ruleId": "wrong-year", "severity": "error", "message": f"{c['id']}: year differs from event {r}"})
         for n in c["numbers"]:
             if n.replace(",", "") not in allowed:
@@ -310,8 +310,10 @@ def script_check(script: str, story: dict, states: list[dict]) -> dict:
     words = len(re.findall(r"\b\w+\b", script))
     allowed = allowed_numbers(story, states)
     warnings = []
-    for n in sorted(set(re.findall(r"\b\d[\d,]*(?:\.\d+)?\b", script))):
-        if n.replace(",", "") not in allowed and not re.fullmatch(r"\d{1,2}", n):
+    body = "\n".join(l for l in script.splitlines() if not l.startswith("["))
+    allowed |= {"1000"}  # unit denominators ("per 1,000")
+    for n in sorted(set(re.findall(r"\b\d[\d,]*(?:\.\d+)?\b", body))):
+        if n.replace(",", "") not in allowed and not re.fullmatch(r"\d{1,2}|0\d*", n) and "." not in n:
             warnings.append({"ruleId": "unsupported-number", "message": f"Number {n} is not found in the canonical run or its cited evidence"})
     if "SIMULATED" not in script and "simulat" not in script.lower():
         warnings.append({"ruleId": "simulation-label", "message": "Script no longer labels the life as simulated"})

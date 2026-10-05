@@ -1,3 +1,4 @@
+import { EpisodeDashboard } from "@/components/lifespan/dashboard";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Plus, ArrowRight } from "lucide-react";
 import { useLifespan } from "@/hooks/useLifespan";
@@ -32,6 +33,7 @@ function Dashboard() {
         <Stat label="Unresolved assumptions" value={unresolved} tone={unresolved ? "warn" : undefined} />
         <Stat label="Audit issues" value={warnings} tone={warnings ? "fail" : undefined} />
       </div>
+      <EpisodeDashboard />
       <div className="grid grid-cols-3 gap-6">
         <section className="col-span-2">
           <h2 className="mb-3 text-xl">Active episodes</h2>

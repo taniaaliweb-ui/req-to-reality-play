@@ -1,3 +1,4 @@
+import { CandidateEvidencePanel } from "@/components/lifespan/product";
 import { createFileRoute } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { useActiveRecords, useLifespan } from "@/hooks/useLifespan";
@@ -65,6 +66,7 @@ function Research() {
           );
         })}
       </div>
+      <CandidateEvidencePanel eid={active.id} />
     </>
   );
 }

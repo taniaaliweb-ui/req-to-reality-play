@@ -1,3 +1,4 @@
+import { CoverageChip } from "@/components/lifespan/sim";
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { ListPlus, RefreshCw } from "lucide-react";
@@ -149,6 +150,7 @@ function LifeEvidence() {
       {sel && cell && selStage && (
         <section className="panel mb-6 p-4">
           <div className="mb-2 flex items-center gap-2"><h3 className="text-base">{selStage.label} · {cell.label}</h3><Chip s={cell.status} />
+            {cell.evidenceStatus && <span className="text-[11px]">Evidence coverage <CoverageChip s={cell.evidenceStatus} /> · Simulation coverage <CoverageChip s={cell.simulationStatus ?? ""} /> · assumptions {cell.assumptionCount ?? 0}</span>}
             <span className="text-xs text-muted-foreground">{selStage.yearStart}–{selStage.yearEnd} · validity window ±{cell.windowYears} yr — {cell.windowReason}</span></div>
           <ul className="mb-3 list-disc pl-5 text-xs text-muted-foreground">{cell.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
           <div className="grid grid-cols-2 gap-4">

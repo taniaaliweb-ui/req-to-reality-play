@@ -1,3 +1,4 @@
+import { CanonicalStory } from "@/components/lifespan/product";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
@@ -29,6 +30,8 @@ function Story() {
     <>
       <PageHeader eyebrow="Pipeline · 8" title="Story Workspace" description="Narrative is interpretation. It must stay traceable to timeline events and facts." actions={<button className="btn" onClick={() => setMsg("No Story Worker configured. LifeSpan will not generate placeholder prose and present it as AI output.")}><Sparkles className="h-4 w-4" /> Draft with AI</button>} />
       {msg && <div className="mb-4 rounded-sm border border-warn/50 bg-assumption-soft px-3 py-2 text-xs">{msg}</div>}
+      <CanonicalStory eid={active.id} />
+      <h2 className="mb-2 text-sm font-medium text-muted-foreground">Manual chapters (editable, legacy)</h2>
       <div className="grid grid-cols-[220px_1fr_300px] gap-5">
         <nav className="panel h-fit py-1">
           {chapters.map((c, i) => (

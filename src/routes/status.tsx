@@ -1,3 +1,4 @@
+import { McpStatusPanel } from "@/components/lifespan/product";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useLifespan } from "@/hooks/useLifespan";
@@ -53,6 +54,7 @@ function Status() {
         <div className="panel p-3"><div className="eyebrow">AI provider</div><div className="data mt-1">{aiProvider.id} · configured: {String(aiProvider.configured)}</div></div>
         <div className="panel p-3"><div className="eyebrow">Records loaded</div><div className="data mt-1">{db.facts.length} facts · {db.timeline.length} events · {db.economics.length} econ-years</div></div>
       </div>
+      <McpStatusPanel />
     </>
   );
 }

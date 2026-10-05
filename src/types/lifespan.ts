@@ -208,6 +208,7 @@ export interface TimelineEvent extends BaseRecord {
   confidence: Level;
   factIds: string[];
   simulationReason: string;
+  simulationRunId?: string | null;
   locked: boolean;
 }
 
@@ -559,6 +560,7 @@ export interface MatrixCell {
   coverage: YearCoverage[]; counts?: Record<Coverage, number>; supportingCount?: number; assumptionCount?: number; gapCount?: number;
   supporting?: (LifeObservation & Record<string, unknown>)[]; candidates?: LifeObservation[]; extra?: Record<string, unknown>[];
   assumptions?: AssumptionRecord[]; gaps?: EvidenceGap[]; researchTasks?: { id: string; question: string; status: string }[];
+  evidenceStatus?: string; simulationStatus?: string; assumedYears?: number;
 }
 export interface MatrixStage { stage: string; label: string; yearStart: number; yearEnd: number; basis: string; applicable: boolean; countries: string[]; cities: string[]; status: CellStatus; cells: MatrixCell[] }
 export interface LifeMatrix { plan: { origin: string; birthYear: number; moves: { year: number; country: string; city: string }[] }; stages: MatrixStage[]; domains: { key: string; label: string }[]; note: string }

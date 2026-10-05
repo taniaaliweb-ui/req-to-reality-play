@@ -8,6 +8,7 @@
 import type { AssumptionInput, AssumptionRecord, ContextRec, HistoricalEventRec, LifeImportPreview, LifeMatrix, LifeObservation, LifeObsSummary, MatrixCell, MatrixStage, MigrationPathEvidence, PolicyRec, ReadinessV2, SnapshotManifest, AuditResult, BaselineInput, CandidateResult, DatasetSnapshot, EconomicBaseline, EconomicProfile, EconomicProfileInput, EngineResult, EvidenceGap, ExternalObservation, Household, ImportPreview, LifespanDB, LineageNode, ProviderInfo, Readiness, SnapshotDiff, SyncReport, VerifiedEconomics, WageDistribution, WageObservation } from "@/types/lifespan";
 import { buildDemoDB } from "@/mock/demoEpisode";
 import { diffWorkspace, type SyncOp } from "./sync";
+import type { CanonicalStatus, Candidate, DashboardData, InputReview, ProductionResult, Receipt2, SimEvent, SimInput, SimJob, SimPrior, SimRun, SimState, StoryResult } from "@/types/simulation";
 
 export type DataMode = "local" | "backend";
 
@@ -37,6 +38,46 @@ export interface LifespanApi {
   truth: TruthApi;
   labor: LaborApi;
   life: LifeApi;
+  sim: SimApi;
+}
+
+/** Phase 6 simulation, story, production, export and research interface. Backend only. */
+export interface SimApi {
+  meta(): Promise<{ engineVersion: string; priorLabel: string; controls: string; traitEffects: { trait: string; affects: string; effect: string }[]; overrides: string[]; batchSizes: number[] }>;
+  priors(history?: boolean): Promise<{ label: string; registryVersion: string; priors: SimPrior[] }>;
+  updatePrior(key: string, patch: { parameter?: Record<string, unknown>; enabled?: boolean; notes?: string }): Promise<SimPrior>;
+  review(episodeId: string): Promise<InputReview>;
+  createInput(episodeId: string, req: { masterSeed: number; acknowledged: boolean; config?: Record<string, number> }): Promise<SimInput>;
+  inputs(episodeId: string): Promise<SimInput[]>;
+  run(req: { inputId: string; seed?: number; overrides?: { type: string; year?: number }[]; label?: string }): Promise<SimRun>;
+  runs(episodeId: string): Promise<SimRun[]>;
+  getRun(id: string): Promise<SimRun>;
+  materialize(id: string): Promise<SimRun>;
+  states(id: string): Promise<SimState[]>;
+  events(id: string, minImportance?: number): Promise<SimEvent[]>;
+  branch(id: string, req: { year: number; overrides: { type: string }[]; label?: string }): Promise<SimRun>;
+  compare(a: string, b: string): Promise<{ firstDivergentYear: number | null; outcomes: Record<string, { a: unknown; b: unknown }>; eventsOnlyInA: string[]; eventsOnlyInB: string[] }>;
+  setCanonical(id: string): Promise<SimRun>;
+  canonical(episodeId: string): Promise<CanonicalStatus>;
+  regenerate(episodeId: string, req: { seed: number; acknowledged: boolean }): Promise<SimRun>;
+  startBatch(inputId: string, runs: number): Promise<SimJob>;
+  job(id: string): Promise<SimJob>;
+  jobs(episodeId: string): Promise<SimJob[]>;
+  cancelJob(id: string): Promise<SimJob>;
+  story(episodeId: string, regenerate?: boolean): Promise<StoryResult>;
+  production(episodeId: string, regenerate?: boolean): Promise<ProductionResult>;
+  saveScript(episodeId: string, script: string): Promise<ProductionResult>;
+  receipt(episodeId: string): Promise<Receipt2>;
+  appendix(episodeId: string): Promise<Record<string, Record<string, unknown>[]>>;
+  dashboard(episodeId: string): Promise<DashboardData>;
+  exportArchive(episodeId: string): Promise<Record<string, unknown>>;
+  importArchive(archive: Record<string, unknown>): Promise<{ episodeId: string; counts: Record<string, number>; note: string }>;
+  exportUrl(episodeId: string, kind: "ledger.csv" | "story.md" | "printable.html"): string;
+  candidates(episodeId?: string): Promise<Candidate[]>;
+  submitCandidate(c: Record<string, unknown>): Promise<Candidate>;
+  reviewCandidate(id: string, status: "ACCEPTED" | "REJECTED", note?: string): Promise<Candidate>;
+  mcpStatus(): Promise<{ status: string; tools: string[]; detail: string; command?: string; cwd?: string; aiIntegrations?: string }>;
+  orchestration(): Promise<{ active: boolean; defaultProvider: string; roles: { role: string; provider: string }[]; providers: { provider: string; status: string }[]; note: string }>;
 }
 
 /** Life-context evidence (Phase 5). Backend only. */
@@ -126,6 +167,7 @@ const LOCAL_TRUTH: TruthApi = {
 };
 const LOCAL_LABOR = new Proxy({}, { get: () => backendOnly }) as LaborApi;
 const LOCAL_LIFE = new Proxy({}, { get: () => backendOnly }) as LifeApi;
+const LOCAL_SIM = new Proxy({}, { get: (_t, k) => (k === "exportUrl" ? () => "#" : backendOnly) }) as SimApi;
 
 /** Thrown when the backend cannot be reached at all. */
 export class BackendUnavailableError extends Error {
@@ -148,6 +190,7 @@ export class LocalLifespanApi implements LifespanApi {
   readonly truth = LOCAL_TRUTH;
   readonly labor = LOCAL_LABOR;
   readonly life = LOCAL_LIFE;
+  readonly sim = LOCAL_SIM;
 
   async load(): Promise<LifespanDB> {
     return readLocalWorkspace() ?? buildDemoDB();
@@ -190,6 +233,7 @@ export class HttpLifespanApi implements LifespanApi {
   readonly truth: TruthApi;
   readonly labor: LaborApi;
   readonly life: LifeApi;
+  readonly sim: SimApi;
   constructor(private baseUrl: string) {
     const enc = encodeURIComponent;
     const qs = (f: Record<string, string | number | undefined> = {}) => {
@@ -254,6 +298,44 @@ export class HttpLifespanApi implements LifespanApi {
       deleteContext: (id) => this.req("DELETE", `/life/context/${enc(id)}`),
       migrationPaths: (eid) => this.req("GET", `/episodes/${enc(eid)}/life/migration-paths`),
       snapshotManifest: async (id) => (await this.req<{ manifest: SnapshotManifest }>("GET", `/snapshots/${enc(id)}`)).manifest,
+    };
+    const ep = (eid: string) => `/episodes/${enc(eid)}`;
+    this.sim = {
+      meta: () => this.req("GET", "/simulation/meta"),
+      priors: (h = false) => this.req("GET", `/simulation/priors${h ? "?include_history=true" : ""}`),
+      updatePrior: (k, p) => this.req("PATCH", `/simulation/priors/${enc(k)}`, p),
+      review: (eid) => this.req("GET", `${ep(eid)}/simulation/review`),
+      createInput: (eid, r) => this.req("POST", `${ep(eid)}/simulation/inputs`, r),
+      inputs: (eid) => this.req("GET", `${ep(eid)}/simulation/inputs`),
+      run: (r) => this.req("POST", "/simulation/runs", r),
+      runs: (eid) => this.req("GET", `${ep(eid)}/simulation/runs`),
+      getRun: (id) => this.req("GET", `/simulation/runs/${enc(id)}`),
+      materialize: (id) => this.req("POST", `/simulation/runs/${enc(id)}/materialize`),
+      states: (id) => this.req("GET", `/simulation/runs/${enc(id)}/states`),
+      events: (id, mi = 0) => this.req("GET", `/simulation/runs/${enc(id)}/events?min_importance=${mi}`),
+      branch: (id, r) => this.req("POST", `/simulation/runs/${enc(id)}/branch`, r),
+      compare: (a, b) => this.req("GET", `/simulation/compare${qs({ a, b })}`),
+      setCanonical: (id) => this.req("POST", `/simulation/runs/${enc(id)}/canonical`),
+      canonical: (eid) => this.req("GET", `${ep(eid)}/simulation/canonical`),
+      regenerate: (eid, r) => this.req("POST", `${ep(eid)}/simulation/regenerate`, r),
+      startBatch: (inputId, runs) => this.req("POST", "/simulation/batches", { inputId, runs }),
+      job: (id) => this.req("GET", `/simulation/jobs/${enc(id)}`),
+      jobs: (eid) => this.req("GET", `${ep(eid)}/simulation/jobs`),
+      cancelJob: (id) => this.req("POST", `/simulation/jobs/${enc(id)}/cancel`),
+      story: (eid, r = false) => this.req("GET", `${ep(eid)}/story-engine${r ? "?regenerate=true" : ""}`),
+      production: (eid, r = false) => this.req("GET", `${ep(eid)}/production-workspace${r ? "?regenerate=true" : ""}`),
+      saveScript: (eid, script) => this.req("PUT", `${ep(eid)}/production-workspace/script`, { script }),
+      receipt: (eid) => this.req("GET", `${ep(eid)}/life-receipt`),
+      appendix: (eid) => this.req("GET", `${ep(eid)}/source-appendix`),
+      dashboard: (eid) => this.req("GET", `${ep(eid)}/dashboard`),
+      exportArchive: (eid) => this.req("GET", `${ep(eid)}/export/archive`),
+      importArchive: (archive) => this.req("POST", "/archives/import", { archive }),
+      exportUrl: (eid, kind) => `${this.baseUrl}/api/v1${ep(eid)}/export/${kind}`,
+      candidates: (eid) => this.req("GET", `/candidate-evidence${qs({ episode_id: eid })}`),
+      submitCandidate: (c) => this.req("POST", "/candidate-evidence", c),
+      reviewCandidate: (id, status, note = "") => this.req("POST", `/candidate-evidence/${enc(id)}/review`, { status, note }),
+      mcpStatus: () => this.req("GET", "/mcp/status"),
+      orchestration: () => this.req("GET", "/orchestration/status"),
     };
     this.truth = {
       providers: (check = false) => this.req("GET", `/data/providers${check ? "?check=true" : ""}`),
