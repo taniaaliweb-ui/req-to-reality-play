@@ -167,7 +167,7 @@ export function buildDemoDB(): LifespanDB {
   return {
     version: 1,
     episodes: [episode],
-    tasks, sources, facts, timeline, economics, chapters,
+    tasks, sources, facts: facts.map((f) => ({ ...f, isPrototype: true })), timeline, economics, chapters,
     simulations: [simulation],
     activity: [
       { id: "A1", at: "2026-10-04T16:20:00Z", episodeId: EP, kind: "audit", text: "Audit run: 2 failures, 5 warnings" },

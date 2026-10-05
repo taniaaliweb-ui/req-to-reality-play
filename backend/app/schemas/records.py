@@ -107,6 +107,13 @@ class FactIn(Stamped):
     derived_from: str | None = None
     notes: str = ""
     status: Literal["verified", "unverified", "unresolved", "disputed"]
+    # Phase 3 provenance (all optional so Phase 1/2 data stays valid)
+    currency: str | None = None
+    external_observation_id: Annotated[str, Field(max_length=160)] | None = None
+    provider: str | None = None
+    dataset: str | None = None
+    indicator_code: str | None = None
+    is_prototype: bool = False
 
     @model_validator(mode="after")
     def _years(self):
@@ -202,6 +209,8 @@ class SettingsIn(Schema):
     show_mock_banners: bool = True
     default_realism: Score = 75
     currency_display: Literal["local", "USD"] = "local"
+    external_data_enabled: bool = True
+    world_bank_enabled: bool = True
 
 
 class AuditOut(Schema):

@@ -4,6 +4,7 @@ import { useActiveRecords, useLifespan } from "@/hooks/useLifespan";
 import { EmptyEpisode, MockBanner, PageHeader } from "@/components/lifespan/primitives";
 import { formatMoney, householdIncome, netWorth, toReal, totalExpenses } from "@/features/economics/calc";
 import { cn } from "@/lib/utils";
+import { CurrencyCalculator, InflationCalculator, VerifiedLedger } from "@/components/lifespan/EconomicTools";
 import { pageHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/economics")({
@@ -12,7 +13,7 @@ export const Route = createFileRoute("/economics")({
 });
 
 function Economics() {
-  const { active } = useLifespan();
+  const { active, mode, reload } = useLifespan();
   const { economics } = useActiveRecords();
   const [real, setReal] = useState(false);
   if (!active) return <EmptyEpisode />;
@@ -24,7 +25,7 @@ function Economics() {
   return (
     <>
       <PageHeader eyebrow="Pipeline · 7b" title="Economic Ledger" description="All arithmetic here is deterministic code. Inputs will come from the Fact Ledger in later phases."
-        actions={<div className="flex rounded-sm border border-border p-0.5">{(["Nominal", `Real (${base?.year ?? "base"} prices)`] as const).map((l, i) => <button key={l} onClick={() => setReal(i === 1)} className={cn("rounded-sm px-3 py-1 text-xs", real === (i === 1) ? "bg-foreground text-background" : "text-muted-foreground")}>{l}</button>)}</div>} />
+        actions={<div className="flex rounded-sm border border-border p-0.5">{(["Nominal", `Prototype index (${base?.year ?? "base"})`] as const).map((l, i) => <button key={l} onClick={() => setReal(i === 1)} className={cn("rounded-sm px-3 py-1 text-xs", real === (i === 1) ? "bg-foreground text-background" : "text-muted-foreground")}>{l}</button>)}</div>} />
       {active.isMock && <MockBanner>Every figure is generated from a deterministic mock formula — not from sourced wage or price data. The price index is illustrative.</MockBanner>}
       {economics.length === 0 ? (
         <div className="panel p-8 text-center text-sm text-muted-foreground">No economic years yet. These will be computed from the Fact Ledger once the backend calculator exists.</div>
@@ -37,11 +38,18 @@ function Economics() {
             </div>
             <div className="data mt-1 flex justify-between text-[10px] text-muted-foreground"><span>{economics[0]?.year}</span><span>{economics.at(-1)?.year}</span></div>
           </div>
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            {["Inflation calculator", "Currency conversion", "Purchasing power adjustment"].map((t) => (
-              <div key={t} className="panel hatch-mock p-3 text-xs"><div className="font-medium">{t}</div><div className="text-muted-foreground">Placeholder — will be a deterministic backend service.</div></div>
-            ))}
-          </div>
+          {mode === "backend" ? (
+            <>
+              <div className="mb-4 grid grid-cols-2 gap-3">
+                <InflationCalculator episodeId={active.id} onSaved={reload} />
+                <CurrencyCalculator episodeId={active.id} onSaved={reload} />
+              </div>
+              <VerifiedLedger episodeId={active.id} />
+            </>
+          ) : (
+            <div className="panel hatch-mock mb-4 p-3 text-xs">Inflation and currency calculators use real World Bank data and run in the LifeSpan backend. Start it with ./scripts/start-local.sh.</div>
+          )}
+          <div className="eyebrow mb-2">Prototype ledger <span className="text-mock">— nominal amounts and the price-index toggle are demo values</span></div>
           <div className="panel max-h-[600px] overflow-auto">
             <table className="tbl data whitespace-nowrap text-[12px]">
               <thead><tr>{["Year", "Age", "Income", "Spouse", "Household", "Housing", "Food", "Education", "Health", "Transport", "Family supp.", "Debt", "Savings", "Investments", "Assets", "Liabilities", "Net worth"].map((h) => <th key={h} className="text-right first:text-left">{h}</th>)}</tr></thead>

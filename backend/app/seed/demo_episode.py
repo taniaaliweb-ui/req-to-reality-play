@@ -22,6 +22,10 @@ def seed_demo(db: Session) -> bool:
         return False
     snap = Snapshot.model_validate(json.loads(SEED_FILE.read_text()))
     report = import_snapshot(db, snap, overwrite=False)
+    # Every demo fact is PROTOTYPE data — never verified history.
+    mock_ids = {e.id for e in snap.episodes if e.is_mock}
+    for f in db.query(m.Fact).filter(m.Fact.episode_id.in_(mock_ids)):
+        f.is_prototype = True
     db.add(m.Meta(key=MARKER, value={"report": {k: v for k, v in report.items() if k != "conflicts"}}))
     db.commit()
     log.info("Seeded PROTOTYPE demo episode (%s records)", report["created"])
