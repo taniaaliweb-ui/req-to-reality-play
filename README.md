@@ -1,4 +1,4 @@
-# LifeSpan — Phase 3 (truth + deterministic economic engine)
+# LifeSpan — Phase 4 (labour, income & dataset snapshot engine)
 
 Research workstation for historically grounded life simulations.
 
@@ -76,6 +76,16 @@ In backend mode an unreachable backend shows **"LifeSpan backend unavailable"** 
 - **Audits** add: DERIVED without lineage, verified FACT without source, PROTOTYPE marked verified, missing CPI input, cross-country CPI, unlabeled FX precision, derived value edited after calculation.
 - **Prepared, not populated**: `wage_observations` (no wage provider exists; nothing is inferred from GDP), `episode_dataset_snapshots` ("Pin snapshot" on Data Sources records the exact observation values an episode used).
 - **Settings**: "External data access" and "World Bank provider" switches (backend-enforced).
+
+### Labour evidence + snapshots (Phase 4)
+Zero-paid core: every provider is free and official; nothing requires an API key, paid service or AI.
+- **ILOSTAT** (`providers/ilostat.py`): live via the official ILO SDMX web service (`sdmx.ilo.org`, free). Registry of earnings (mean/median monthly, hourly; by sex, occupation, education, urban/rural, industry) and context series (participation, employment ratio, unemployment — stored only).
+- **UAE FCSC** and **India MoSPI/PLFS**: structured CSV import of published tables (no scraping). The UAE .Stat API is checked live but returned HTTP 403 from the build environment, so it is not claimed to work.
+- **Labor Data** page: fetch, filter by dimensions, CSV import with preview (rows / valid / invalid / duplicates / changed). Wage-group rows become distributions (intervals, never exact salaries).
+- **Employment Evidence** page: per-life-stage economic profiles; deterministic *Evidence Match Score* (not a probability) with per-dimension reasons and year distance; accept / reject / flag / add assumption; baselines (FACT_SUPPORTED same year only, DERIVED = CPI-adjusted with lineage, ASSUMPTION with written reasoning); confidence HIGH/MEDIUM/LOW/INSUFFICIENT_DATA; prototype income shown alongside, never replaced; evidence gaps → research tasks; readiness checklist; household income structure (no invented amounts).
+- **Dataset Snapshots** page: create → finalize (SHA-256 hash, SQLite triggers block edits) → new version → diff.
+- Annualizing wages requires explicit assumptions (`POST /economics/annualize`); gross/net is never assumed.
+- Tests: `tests/test_labor.py` (offline recorded ILOSTAT CSV in `tests/fixtures/ilo`); `LIFESPAN_LIVE_TESTS=1` adds live ILOSTAT and UAE checks.
 
 ## Moving Phase 1 browser data
 In backend mode, if this browser still has Phase 1 data, **Settings → Import Local Prototype Data** sends it to the backend (validated, IDs preserved). Existing backend records are only overwritten after confirmation. Browser data is never deleted.
