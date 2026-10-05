@@ -88,7 +88,7 @@ function Review({ eid, onRun }: { eid: string; onRun: (id: string) => void }) {
       </section>
       <aside className="panel h-fit space-y-3 p-4">
         <label className="block"><span className="field-label">Master seed</span><input type="number" className="input data" value={seed} onChange={(e) => setSeed(Number(e.target.value))} /></label>
-        {Object.keys(CTL).map((k) => <Slider key={k} label={CTL[k]} value={cfg[k] ?? 50} onChange={(n) => setCfg({ ...cfg, [k]: n })} />)}
+        {Object.keys(CTL).map((k) => <Slider key={k} label={CTL[k] ?? k} value={cfg[k] ?? 50} onChange={(n) => setCfg({ ...cfg, [k]: n })} />)}
         <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />I acknowledge that {rv.needsAcknowledgement.length} dimension(s) rely on partial evidence, assumptions or provisional priors.</label>
         <ErrorLine msg={msg} />
         <button className="btn-primary w-full justify-center" disabled={!rv.canRun || busy} onClick={() => void go()}><Play className="h-4 w-4" /> {busy ? "Simulating…" : "Run Life"}</button>
