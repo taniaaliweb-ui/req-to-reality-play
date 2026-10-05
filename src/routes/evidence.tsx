@@ -262,6 +262,14 @@ function Evidence() {
                       <div className="data text-base">{range(b)} {b.currency}/{b.payPeriod.toLowerCase()} <span className="text-xs text-muted-foreground">{b.grossOrNet === "UNKNOWN" ? "gross/net unknown" : b.grossOrNet.toLowerCase()} · not take-home pay</span></div>
                       <div className="text-muted-foreground">{b.confidenceReasons.join(" · ")}</div>
                       {b.reasoning && <div className="mt-1">Reasoning: {b.reasoning}</div>}
+                      {b.temporalCoverage && b.temporalCoverage.semantics === "WAGE_ANCHOR" && (
+                        <div className="mt-2 rounded-sm border border-warn/50 bg-warn/5 p-2">
+                          <div className="font-semibold">WAGE ANCHOR · direct evidence for {b.temporalCoverage.directCoverage.join(", ")} only · stage {b.yearStart}–{b.yearEnd}</div>
+                          <div className="mt-1 flex h-2 overflow-hidden rounded-sm border border-border">{b.temporalCoverage.years.map((y) => <div key={y.year} title={`${y.year}: ${y.coverage}`} className={cn("flex-1", y.coverage === "DIRECT" ? "bg-pass" : y.coverage === "NEARBY" ? "bg-pass/50" : y.coverage === "DERIVED" ? "bg-primary/60" : y.coverage === "ASSUMED" ? "bg-warn" : "bg-fail/70")} />)}</div>
+                          <div className="mt-1 text-muted-foreground">{Object.entries(b.temporalCoverage.counts).map(([k, v]) => `${v} ${k}`).join(" · ")}{b.temporalCoverage.unresolvedYears.length > 0 && ` · unresolved: ${b.temporalCoverage.unresolvedYears.join(", ")}`}</div>
+                          <div className="text-[10px] text-muted-foreground">{b.temporalCoverage.note}</div>
+                        </div>
+                      )}
                       {b.evidence.map((e) => <div key={e.wageObservationId} className="mt-1">Evidence {e.sourceYear}: {e.population} — {fmtWage(e.value)}{e.derivedValue && ` → CPI-adjusted ${fmtWage(e.derivedValue)} (fact ${e.derivedFactId})`} · score {e.score}</div>)}
                     </div>
                     <div>

@@ -503,6 +503,7 @@ export interface EconomicBaseline {
   evidence: { wageObservationId: string; observationId: string; factId: string; score: number; yearDistance: number; sourceYear: number; value: string; population: string; derivedFactId?: string; derivedValue?: string }[];
   sourceFactIds: string[]; derivedCalculationIds: string[]; assumptionFactId: string | null; userApproved: boolean; approvedAt: string | null;
   createdAt: string; pinnedInSnapshot: string | null;
+  temporalCoverage?: WageAnchorCoverage;
   prototypeIncome: { isPrototype: true; note: string; years: { year: number; income: number; spouseIncome: number; currency: string }[] };
 }
 export interface BaselineInput {
