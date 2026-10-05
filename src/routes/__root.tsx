@@ -37,10 +37,22 @@ function NotFoundComponent() {
   );
 }
 
+const STALE_CHUNK_RE = /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i;
+const RELOAD_KEY = "lifespan.chunkReloadAt";
+
+function reloadForStaleChunk() {
+  const last = Number(window.sessionStorage.getItem(RELOAD_KEY) ?? 0);
+  if (Date.now() - last < 10_000) return false; // avoid reload loops
+  window.sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+  window.location.reload();
+  return true;
+}
+
 function ErrorComponent({ error, reset }: ErrorComponentProps) {
   console.error(error);
   const router = useRouter();
   useEffect(() => {
+    if (error instanceof Error && STALE_CHUNK_RE.test(error.message) && reloadForStaleChunk()) return;
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
 
@@ -120,6 +132,17 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  // After a new version is published, old page chunks no longer exist.
+  // Reload once to pick up the new version instead of showing a blank screen.
+  useEffect(() => {
+    const onPreloadError = (e: Event) => {
+      e.preventDefault();
+      reloadForStaleChunk();
+    };
+    window.addEventListener("vite:preloadError", onPreloadError);
+    return () => window.removeEventListener("vite:preloadError", onPreloadError);
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
