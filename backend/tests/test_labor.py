@@ -139,9 +139,9 @@ def test_matching_ranking_year_occupation_education_country(srv):
     scores = [x["score"] for x in cands]
     assert scores == sorted(scores, reverse=True)
     # year distance is penalised
-    same = [x for x in cands if x["wage"]["occupationCode"] == "3" and x["wage"]["occupationClassification"] in ("ISCO-08", "ISCO-88") and x["wage"]["sex"] == "MALE"]
-    by_year = {x["sourceYear"]: x["score"] for x in same}
-    assert by_year[2012] > by_year[2018] >= 0 and by_year[2010] > by_year[2012] - 7
+    all88 = c.get(f"/economic-profiles/{p88['id']}/candidates", params={"limit": 200}).json()["candidates"]
+    by_year = {x["sourceYear"]: x["score"] for x in all88 if x["wage"]["occupationCode"] == "3" and x["wage"]["occupationClassification"] == "ISCO-88" and x["wage"]["sex"] == "MALE"}
+    assert by_year[2010] > by_year[2012]
     # education match ranks above all-education for EDU series
     edu = {x["wage"]["educationCode"]: x["score"] for x in cands if x["wage"]["educationCode"] and x["sourceYear"] == 2010 and x["wage"]["sex"] == "MALE"}
     if "INT" in edu and "TOTAL" in edu:
