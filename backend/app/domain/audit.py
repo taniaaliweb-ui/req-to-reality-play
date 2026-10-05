@@ -98,6 +98,46 @@ def run_audits(db: Session, episode_id: str) -> list[dict]:
     else:
         push("Story", "PASS", "Chapter references resolve", "Semantic narrative-vs-timeline check requires the Audit Worker.")
 
+    # Truth / economic-data audit (Phase 3)
+    calcs = {c.output_fact_id: c for c in db.scalars(select(m.DerivedCalculation).where(m.DerivedCalculation.episode_id == episode_id)) if c.output_fact_id}
+    inputs_by_calc: dict[str, list] = {}
+    for ci in db.scalars(select(m.CalculationInput)):
+        inputs_by_calc.setdefault(ci.calculation_id, []).append(ci)
+    fact_by_id = {f.id: f for f in facts}
+    no_lineage = [f for f in facts if f.fact_type == "DERIVED" and f.status == "verified" and f.id not in calcs and not f.is_prototype]
+    if no_lineage:
+        push("Economic", "FAIL", "Verified DERIVED value without calculation lineage", "A derived value can only be verified if its calculation and inputs are stored.", [f.id for f in no_lineage])
+    verified_nosrc = [f for f in facts if f.fact_type in ("FACT", "ESTIMATE") and f.status == "verified" and not f.source_id]
+    if verified_nosrc:
+        push("Fact", "FAIL", "FACT marked verified but missing source", "Verification requires an identified source.", [f.id for f in verified_nosrc])
+    proto_verified = [f for f in facts if f.is_prototype and f.status == "verified"]
+    if proto_verified:
+        push("Fact", "FAIL", f"{len(proto_verified)} PROTOTYPE figure(s) marked verified", "Demo values are not verified history. Replace them with sourced data or change their status.", [f.id for f in proto_verified])
+    bad_infl, cross, fx_label, changed = [], [], [], []
+    for fid, c in calcs.items():
+        roles = {ci.role: fact_by_id.get(ci.fact_id) for ci in inputs_by_calc.get(c.id, [])}
+        if c.calculation_type in ("inflation-adjust", "real-income"):
+            if roles.get("source_cpi") is None or roles.get("target_cpi") is None:
+                bad_infl.append(fid)
+            elif roles["source_cpi"].country != roles["target_cpi"].country:
+                cross.append(fid)
+        if c.calculation_type == "currency-convert" and c.parameters_json.get("precision") != "annual-average":
+            fx_label.append(fid)
+        out_f = fact_by_id.get(fid)
+        stored = (c.result_json or {}).get("result")
+        if out_f is not None and stored is not None and out_f.value != stored:
+            changed.append(fid)
+    if bad_infl:
+        push("Economic", "FAIL", "Inflation adjustment missing a CPI input", "Both source-year and target-year CPI must be stored as inputs.", bad_infl)
+    if cross:
+        push("Economic", "FAIL", "Cross-country CPI comparison", "CPI index levels from different countries cannot be compared directly.", cross)
+    if fx_label:
+        push("Economic", "WARNING", "FX conversion not labelled as annual average", "Annual-average rates must not be presented as exact daily rates.", fx_label)
+    if changed:
+        push("Economic", "FAIL", "Derived value edited after calculation", "The fact's value no longer matches its stored calculation result.", changed)
+    if calcs and not (no_lineage or bad_infl or cross or changed):
+        push("Economic", "PASS", f"{len(calcs)} derived value(s) have complete lineage", "Every saved calculation has its inputs, formula and engine version.")
+
     push("Historical", "WARNING", "Historical consistency not yet verified", "Requires Audit Worker + dated event datasets (later phase).", automated=False)
     cultural = [f for f in facts if f.category == "Social environment" and f.fact_type == "ASSUMPTION"]
     push("Bias", "WARNING" if cultural else "PASS",
