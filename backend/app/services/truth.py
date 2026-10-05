@@ -18,6 +18,7 @@ CPI = "FP.CPI.TOTL"
 FX = "PA.NUS.FCRF"
 # ISO3 → ISO 4217 for currencies the demo needs; other currencies are passed explicitly.
 CURRENCY_BY_COUNTRY = {"IND": "INR", "ARE": "AED", "USA": "USD", "GBR": "GBP", "PAK": "PKR", "BGD": "BDT", "NPL": "NPR", "LKA": "LKR", "PHL": "PHP", "SAU": "SAR"}
+ISO2_TO_3 = {"IN": "IND", "AE": "ARE", "US": "USA", "GB": "GBR", "PK": "PAK", "BD": "BGD", "NP": "NPL", "LK": "LKA", "PH": "PHL", "SA": "SAU"}
 COUNTRY_BY_CURRENCY = {v: k for k, v in CURRENCY_BY_COUNTRY.items()}
 SOURCE_IDS = {"world-bank": "SRC-WB-WDI"}
 
@@ -69,7 +70,13 @@ def obs_out(o: m.ExternalObservation) -> dict:
 
 
 def find_obs(db: Session, indicator: str, country: str, year: int, provider: str = "world-bank") -> m.ExternalObservation | None:
-    return db.get(m.ExternalObservation, obs_id(provider, indicator, country, year))
+    row = db.get(m.ExternalObservation, obs_id(provider, indicator, country, year))
+    if row is None and len(country) == 2:  # ISO2 given; observations are keyed by ISO3
+        for o in db.scalars(select(m.ExternalObservation).where(m.ExternalObservation.provider == provider,
+                                                                m.ExternalObservation.indicator_code == indicator, m.ExternalObservation.year == year)):
+            if ((o.raw_metadata or {}).get("country") or {}).get("id", "").upper() == country.upper():
+                return o
+    return row
 
 
 # ---------- sources + facts ----------
@@ -148,7 +155,7 @@ def _save_derived(db: Session, episode_id: str, r: eng.EngineResult, input_facts
 
 def inflation_adjust(db: Session, *, episode_id: str | None, country: str, amount, source_year: int, target_year: int,
                      currency: str | None, save: bool) -> dict:
-    country = country.upper()
+    country = ISO2_TO_3.get(country.upper(), country.upper())
     currency = currency or CURRENCY_BY_COUNTRY.get(country) or "LCU"
     so, to = find_obs(db, CPI, country, source_year), find_obs(db, CPI, country, target_year)
     r = eng.adjust_for_inflation(amount, source_year, target_year, so.value if so else None, to.value if to else None, country=country, currency=currency)
@@ -168,7 +175,7 @@ def inflation_adjust(db: Session, *, episode_id: str | None, country: str, amoun
 
 def currency_convert(db: Session, *, episode_id: str | None, amount, year: int, from_country: str, to_country: str,
                      from_currency: str | None, to_currency: str | None, save: bool) -> dict:
-    fc, tc = from_country.upper(), to_country.upper()
+    fc, tc = (ISO2_TO_3.get(c.upper(), c.upper()) for c in (from_country, to_country))
     fcur = from_currency or CURRENCY_BY_COUNTRY.get(fc) or "LCU"
     tcur = to_currency or CURRENCY_BY_COUNTRY.get(tc) or "LCU"
     so = None if fcur == "USD" else find_obs(db, FX, fc, year)
