@@ -5,7 +5,7 @@
 //   VITE_LIFESPAN_DATA_MODE=local     -> LocalLifespanApi, browser storage (prototype/debug; default)
 //   VITE_LIFESPAN_API_URL=http://127.0.0.1:8000
 // In backend mode there is NO silent fallback to browser storage.
-import type { AuditResult, LifespanDB } from "@/types/lifespan";
+import type { AuditResult, EngineResult, ExternalObservation, LifespanDB, LineageNode, ProviderInfo, SyncReport, VerifiedEconomics } from "@/types/lifespan";
 import { buildDemoDB } from "@/mock/demoEpisode";
 import { diffWorkspace, type SyncOp } from "./sync";
 
@@ -34,7 +34,30 @@ export interface LifespanApi {
   /** Canonical audits (backend). Local mode returns null → caller uses local rules. */
   getAudits(episodeId: string): Promise<AuditResult[] | null>;
   importWorkspace(db: LifespanDB, overwrite: boolean): Promise<ImportReport>;
+  truth: TruthApi;
 }
+
+export interface InflationRequest { episodeId?: string; country: string; amount: string; sourceYear: number; targetYear: number; currency?: string; save: boolean }
+export interface FxRequest { episodeId?: string; amount: string; year: number; fromCountry: string; toCountry: string; save: boolean }
+
+/** Truth + economic engine. All external data is fetched by the backend — never by the browser. */
+export interface TruthApi {
+  providers(check?: boolean): Promise<ProviderInfo[]>;
+  syncWorldBank(req: { indicators: string[]; countries: string[]; yearStart: number; yearEnd: number }): Promise<SyncReport>;
+  observations(filter?: { country?: string; indicator?: string }): Promise<ExternalObservation[]>;
+  factsFromObservations(episodeId: string, observationIds: string[]): Promise<{ factIds: string[]; missingObservations: string[] }>;
+  inflationAdjust(req: InflationRequest): Promise<EngineResult>;
+  currencyConvert(req: FxRequest): Promise<EngineResult>;
+  lineage(factId: string): Promise<LineageNode>;
+  verifiedEconomics(episodeId: string, baseYear: number): Promise<VerifiedEconomics>;
+  pinSnapshot(episodeId: string, label: string): Promise<{ id: string; items: unknown[] }>;
+}
+
+const backendOnly = () => Promise.reject(new ApiError(400, "Requires the LifeSpan backend (start it with ./scripts/start-local.sh)."));
+const LOCAL_TRUTH: TruthApi = {
+  providers: backendOnly, syncWorldBank: backendOnly, observations: backendOnly, factsFromObservations: backendOnly,
+  inflationAdjust: backendOnly, currencyConvert: backendOnly, lineage: backendOnly, verifiedEconomics: backendOnly, pinSnapshot: backendOnly,
+};
 
 /** Thrown when the backend cannot be reached at all. */
 export class BackendUnavailableError extends Error {
@@ -54,6 +77,7 @@ export const LOCAL_STORAGE_KEY = "lifespan.db.v1";
 
 export class LocalLifespanApi implements LifespanApi {
   readonly mode = "local" as const;
+  readonly truth = LOCAL_TRUTH;
 
   async load(): Promise<LifespanDB> {
     return readLocalWorkspace() ?? buildDemoDB();
@@ -93,7 +117,24 @@ export function readLocalWorkspace(): LifespanDB | null {
 
 export class HttpLifespanApi implements LifespanApi {
   readonly mode = "backend" as const;
-  constructor(private baseUrl: string) {}
+  readonly truth: TruthApi;
+  constructor(private baseUrl: string) {
+    const enc = encodeURIComponent;
+    this.truth = {
+      providers: (check = false) => this.req("GET", `/data/providers${check ? "?check=true" : ""}`),
+      syncWorldBank: (req) => this.req("POST", "/data/world-bank/sync", req),
+      observations: (f = {}) => {
+        const q = new URLSearchParams(Object.entries(f).filter(([, v]) => v) as [string, string][]).toString();
+        return this.req("GET", `/data/observations${q ? `?${q}` : ""}`);
+      },
+      factsFromObservations: (eid, ids) => this.req("POST", `/episodes/${enc(eid)}/facts/from-observations`, { observationIds: ids }),
+      inflationAdjust: (req) => this.req("POST", "/economics/inflation-adjust", req),
+      currencyConvert: (req) => this.req("POST", "/economics/currency-convert", req),
+      lineage: (fid) => this.req("GET", `/facts/${enc(fid)}/lineage`),
+      verifiedEconomics: (eid, baseYear) => this.req("GET", `/episodes/${enc(eid)}/economics/verified?baseYear=${baseYear}`),
+      pinSnapshot: (eid, label) => this.req("POST", `/episodes/${enc(eid)}/dataset-snapshots`, { label }),
+    };
+  }
 
   private async req<T>(method: string, path: string, body?: unknown): Promise<T> {
     let res: Response;
@@ -117,7 +158,9 @@ export class HttpLifespanApi implements LifespanApi {
       }
       console.error("[lifespanApi] HTTP", res.status, method, path, detail);
       const msg =
-        res.status === 404 ? "Record not found." : res.status === 422 ? "The backend rejected invalid data." : res.status === 409 ? "That record already exists." : "The backend could not complete the request.";
+        typeof (detail as { detail?: unknown })?.detail === "string" && res.status !== 500
+          ? String((detail as { detail: string }).detail)
+          : res.status === 404 ? "Record not found." : res.status === 422 ? "The backend rejected invalid data." : res.status === 409 ? "That record already exists." : "The backend could not complete the request.";
       throw new ApiError(res.status, msg, detail);
     }
     if (res.status === 204) return undefined as T;
