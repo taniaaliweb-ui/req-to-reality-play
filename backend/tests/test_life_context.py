@@ -101,7 +101,7 @@ def test_matrix_cells_match_scores_and_windows(srv):
     mx = c.get(f"/episodes/{EP}/life/matrix").json()
     st = {s["stage"]: s for s in mx["stages"]}
     assert st["birth"]["status"] == "READY"
-    assert st["migration"]["applicable"] and st["migration"]["countries"] == ["IND"]  # two years before the 2004 move
+    assert st["migration"]["applicable"] and st["migration"]["countries"] == ["ARE", "IND"]  # 2002–2004: origin then destination
     assert "ARE" in st["mid-career"]["countries"]
     housing = next(x for x in st["mid-career"]["cells"] if x["domain"] == "housing")
     assert housing["status"] == "MISSING"
