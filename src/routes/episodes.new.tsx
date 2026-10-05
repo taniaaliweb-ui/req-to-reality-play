@@ -4,6 +4,7 @@ import { useLifespan } from "@/hooks/useLifespan";
 import { CharacterForm, DnaSummary } from "@/components/lifespan/CharacterForm";
 import { PageHeader } from "@/components/lifespan/primitives";
 import { defaultControls, defaultTraits } from "@/lib/defaults";
+import { newId } from "@/services/lifespanApi";
 import { scaffoldEpisode } from "@/features/episodes/scaffold";
 import type { Character } from "@/types/lifespan";
 import { cn } from "@/lib/utils";
@@ -41,14 +42,10 @@ function NewEpisode() {
 
   const create = () => {
     const now = new Date().toISOString();
-    let createdId = "";
-    mutate((db) => {
-      const r = scaffoldEpisode(db, title || `${c.country || "Unknown"}, ${c.birthYear}`, { ...c, id: `ch-${Date.now()}`, createdAt: now, updatedAt: now });
-      createdId = r.id;
-      return r.db;
-    }, { kind: "episode", text: `Episode created: ${title || c.country}` });
+    const createdId = newId("ep");
+    mutate((db) => scaffoldEpisode(db, title || `${c.country || "Unknown"}, ${c.birthYear}`, { ...c, id: `ch-${createdId}`, createdAt: now, updatedAt: now }, createdId).db, { kind: "episode", text: `Episode created: ${title || c.country}` });
     setTimeout(() => {
-      if (createdId) setActiveId(createdId);
+      setActiveId(createdId);
       navigate({ to: "/research" });
     }, 0);
   };
