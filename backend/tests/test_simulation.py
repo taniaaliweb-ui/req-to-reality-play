@@ -30,7 +30,7 @@ def srv(tmp_path, monkeypatch):
 
 
 def _asm(c, **kw):
-    body = {"domain": "income", "lifeStage": "first-job", "claim": "x", "value": "", "unit": "", "reason": "test assumption", "confidence": "LOW"} | kw
+    body = {"domain": "income", "lifeStage": "first-job", "claim": "x", "value": "", "unit": "", "reason": "explicit test assumption for simulation", "confidence": "LOW"} | kw
     r = c.post(f"/episodes/{EP}/assumptions", json=body)
     assert r.status_code == 201, r.text
     return r.json()
