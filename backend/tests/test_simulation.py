@@ -127,7 +127,7 @@ def test_economics_reconcile_and_death_terminates(srv):
                 assert Decimal(rec["difference"]) == 0
                 assert Decimal(rec["closing"]) == Decimal(rec["opening"]) + Decimal(rec["income"]) - Decimal(rec["expenses"]) + Decimal(rec["gains"]) + Decimal(rec["transfers"])
         d = next(x for x in ev if x["eventType"] == "death" and x["occurred"])
-        assert st[-1]["year"] == d["year"] and all(x["seq"] < d["seq"] or x["eventType"] == "estate" for x in ev)
+        assert st[-1]["year"] == d["year"] and all(x["seq"] <= d["seq"] or x["eventType"] == "estate" for x in ev)
         assert d["probability"] is not None  # hazard draw, not life expectancy
         deaths.add(d["age"])
     assert len(deaths) > 1
