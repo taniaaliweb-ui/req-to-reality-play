@@ -15,9 +15,8 @@ export const RESEARCH_TEMPLATE: Record<ResearchCategory, string[]> = {
 
 export const CHAPTER_TITLES = ["Birth and Family", "Childhood", "Education", "Entering Adulthood", "Career", "Marriage and Family", "Crisis / Opportunity", "Migration", "Middle Age", "Later Life", "Death", "Life Receipt"];
 
-export function scaffoldEpisode(db: LifespanDB, title: string, character: Character): { db: LifespanDB; id: string } {
+export function scaffoldEpisode(db: LifespanDB, title: string, character: Character, id: string = newId("ep")): { db: LifespanDB; id: string } {
   const now = new Date().toISOString();
-  const id = newId("ep");
   const episode: Episode = { id, createdAt: now, updatedAt: now, title, stage: "research", character, isMock: false };
   const period = `${character.birthYear}–${character.birthYear + 80}`;
   const tasks: ResearchTask[] = Object.entries(RESEARCH_TEMPLATE).flatMap(([cat, qs]) =>

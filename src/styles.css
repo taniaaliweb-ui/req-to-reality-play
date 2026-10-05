@@ -172,6 +172,9 @@
   .tbl tr:hover td {
     @apply bg-accent/40;
   }
+  .tbl td.data {
+    @apply whitespace-nowrap;
+  }
   .chip {
     @apply inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 font-mono text-[10.5px] font-medium uppercase tracking-wider;
   }
