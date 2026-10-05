@@ -82,6 +82,13 @@ class Fact(Stamped, Base):
     derived_from: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(20))
+    # Phase 3 provenance
+    currency: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    external_observation_id: Mapped[str | None] = mapped_column(ForeignKey("external_observations.id", ondelete="SET NULL"), nullable=True)
+    provider: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    dataset: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    indicator_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    is_prototype: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class TimelineEvent(Stamped, Base):
@@ -170,3 +177,109 @@ class Meta(Base):
     __tablename__ = "meta"
     key: Mapped[str] = mapped_column(String(80), primary_key=True)
     value: Mapped[dict] = mapped_column(JSON)
+
+
+# ---------------- Phase 3: truth + economic engine ----------------
+
+class ExternalObservation(Base):
+    """A value exactly as retrieved from an external provider (before it becomes a Fact)."""
+    __tablename__ = "external_observations"
+    id: Mapped[str] = mapped_column(String(160), primary_key=True)  # provider:indicator:country:year
+    provider: Mapped[str] = mapped_column(String(40), index=True)
+    dataset: Mapped[str] = mapped_column(String(200))
+    indicator_code: Mapped[str] = mapped_column(String(80), index=True)
+    indicator_name: Mapped[str] = mapped_column(Text)
+    country_code: Mapped[str] = mapped_column(String(8), index=True)
+    country_name: Mapped[str] = mapped_column(String(200))
+    year: Mapped[int] = mapped_column(Integer, index=True)
+    value: Mapped[str] = mapped_column(String(60))  # decimal string: full provider precision, no float rounding
+    unit: Mapped[str] = mapped_column(String(120))
+    source_organization: Mapped[str] = mapped_column(Text, default="")
+    source_note: Mapped[str] = mapped_column(Text, default="")
+    license: Mapped[str] = mapped_column(String(200), default="")
+    source_url: Mapped[str] = mapped_column(Text, default="")
+    provider_last_updated: Mapped[str] = mapped_column(String(40), default="")
+    raw_metadata: Mapped[dict] = mapped_column(JSON, default=dict)
+    retrieved_at: Mapped[str] = mapped_column(String(40))
+    created_at: Mapped[str] = mapped_column(String(40))
+    updated_at: Mapped[str] = mapped_column(String(40))
+
+
+class ObservationRevision(Base):
+    """Audit trail when a refresh returns a different value for an existing observation."""
+    __tablename__ = "observation_revisions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    observation_id: Mapped[str] = mapped_column(ForeignKey("external_observations.id", ondelete="CASCADE"), index=True)
+    old_value: Mapped[str] = mapped_column(String(60))
+    new_value: Mapped[str] = mapped_column(String(60))
+    old_retrieved_at: Mapped[str] = mapped_column(String(40))
+    new_retrieved_at: Mapped[str] = mapped_column(String(40))
+    old_provider_last_updated: Mapped[str] = mapped_column(String(40), default="")
+
+
+class ProviderSync(Base):
+    """One row per synchronisation request (what was asked, what came back)."""
+    __tablename__ = "provider_syncs"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(40), index=True)
+    started_at: Mapped[str] = mapped_column(String(40))
+    finished_at: Mapped[str] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(20))  # ok | partial | error
+    request: Mapped[dict] = mapped_column(JSON)
+    summary: Mapped[dict] = mapped_column(JSON)
+
+
+class DerivedCalculation(Base):
+    __tablename__ = "derived_calculations"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    episode_id: Mapped[str | None] = mapped_column(EP_FK(), nullable=True, index=True)
+    output_fact_id: Mapped[str | None] = mapped_column(ForeignKey("facts.id", ondelete="SET NULL"), nullable=True, index=True)
+    calculation_type: Mapped[str] = mapped_column(String(40))
+    formula: Mapped[str] = mapped_column(Text)
+    formula_version: Mapped[str] = mapped_column(String(40))
+    engine_version: Mapped[str] = mapped_column(String(20))
+    parameters_json: Mapped[dict] = mapped_column(JSON)
+    result_json: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class CalculationInput(Base):
+    __tablename__ = "calculation_inputs"
+    calculation_id: Mapped[str] = mapped_column(ForeignKey("derived_calculations.id", ondelete="CASCADE"), primary_key=True)
+    fact_id: Mapped[str] = mapped_column(ForeignKey("facts.id", ondelete="RESTRICT"), primary_key=True)
+    role: Mapped[str] = mapped_column(String(40), primary_key=True)
+
+
+class WageObservation(Base):
+    """Structure for future wage datasets. Nothing writes here in Phase 3 (no wage provider exists)."""
+    __tablename__ = "wage_observations"
+    id: Mapped[str] = mapped_column(String(160), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(40))
+    dataset: Mapped[str] = mapped_column(String(200))
+    country_code: Mapped[str] = mapped_column(String(8))
+    region: Mapped[str] = mapped_column(String(200), default="")
+    year: Mapped[int] = mapped_column(Integer)
+    occupation: Mapped[str] = mapped_column(String(200), default="")
+    industry: Mapped[str] = mapped_column(String(200), default="")
+    experience_level: Mapped[str] = mapped_column(String(80), default="")
+    education: Mapped[str] = mapped_column(String(120), default="")
+    gender: Mapped[str] = mapped_column(String(40), default="")
+    sector: Mapped[str] = mapped_column(String(40), default="")  # formal | informal | all
+    period: Mapped[str] = mapped_column(String(20))  # monthly | annual | hourly
+    basis: Mapped[str] = mapped_column(String(10))  # gross | net
+    statistic: Mapped[str] = mapped_column(String(10))  # mean | median
+    value: Mapped[str] = mapped_column(String(60))
+    currency: Mapped[str] = mapped_column(String(8))
+    source_population: Mapped[str] = mapped_column(Text, default="")
+    source_id: Mapped[str | None] = mapped_column(ForeignKey("sources.id", ondelete="SET NULL"), nullable=True)
+    retrieved_at: Mapped[str] = mapped_column(String(40))
+
+
+class EpisodeDatasetSnapshot(Base):
+    """Pins the exact observation values an episode relied on at a point in time."""
+    __tablename__ = "episode_dataset_snapshots"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    episode_id: Mapped[str] = mapped_column(EP_FK(), index=True)
+    label: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[str] = mapped_column(String(40))
+    items: Mapped[list] = mapped_column(JSON)  # [{observationId, value, retrievedAt, providerLastUpdated}]
