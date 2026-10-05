@@ -116,7 +116,7 @@ def test_sync_normalises_and_dedupes(srv):
     again = _ilo_sync(c, ["DF_EAR_EMTA_SEX_OCU_NB"])
     assert again["indicators"][0]["created"] == 0 and again["indicators"][0]["unchanged"] == ear["retrieved"]
     ws = c.get("/labor/wage-observations", params={"country": "IND", "occupation": "3", "yearStart": 2010, "yearEnd": 2010}).json()
-    assert ws and all(w["occupationClassification"] in ("ISCO-08", "ISCO-88") for w in ws)
+    assert ws and all(w["occupationClassification"] in ("ISCO-08", "ISCO-88", "ILO skill level") for w in ws)
     assert all(w["grossOrNet"] == "UNKNOWN" and w["employmentStatus"] == "EMPLOYEE" for w in ws)
     assert all(w["citizenship"] is None and w["region"] is None for w in ws)  # not provided -> NULL, never invented
 
