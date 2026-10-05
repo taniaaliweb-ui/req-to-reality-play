@@ -310,7 +310,9 @@ def script_check(script: str, story: dict, states: list[dict]) -> dict:
     words = len(re.findall(r"\b\w+\b", script))
     allowed = allowed_numbers(story, states)
     warnings = []
-    for n in sorted(set(re.findall(r"\b\d[\d,]*(?:\.\d+)?\b", script))):
+    body = "\n".join(l for l in script.splitlines() if not l.startswith("["))
+    allowed |= {"1000"}  # unit denominators ("per 1,000")
+    for n in sorted(set(re.findall(r"\b\d[\d,]*(?:\.\d+)?\b", body))):
         if n.replace(",", "") not in allowed and not re.fullmatch(r"\d{1,2}", n):
             warnings.append({"ruleId": "unsupported-number", "message": f"Number {n} is not found in the canonical run or its cited evidence"})
     if "SIMULATED" not in script and "simulat" not in script.lower():
