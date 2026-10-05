@@ -280,16 +280,11 @@ def verified_economics(db: Session, episode_id: str, base_year: int) -> dict:
 
 # ---------- dataset snapshots ----------
 def pin_snapshot(db: Session, episode_id: str, label: str) -> dict:
-    facts = db.scalars(select(m.Fact).where(m.Fact.episode_id == episode_id, m.Fact.external_observation_id.is_not(None)))
-    items = []
-    for f in facts:
-        o = db.get(m.ExternalObservation, f.external_observation_id)
-        if o:
-            items.append({"observationId": o.id, "factId": f.id, "value": o.value, "retrievedAt": o.retrieved_at, "providerLastUpdated": o.provider_last_updated})
-    snap = m.EpisodeDatasetSnapshot(id="SNAP-" + uuid.uuid4().hex[:10], episode_id=episode_id, label=label, created_at=now_iso(), items=items)
-    db.add(snap)
-    db.commit()
-    return {"id": snap.id, "episodeId": episode_id, "label": label, "createdAt": snap.created_at, "items": items}
+    """Phase 3 endpoint kept for compatibility: creates and immediately finalizes a Phase 4 snapshot."""
+    from app.services import snapshots
+    snap = snapshots.create(db, episode_id, label)
+    snapshots.finalize(db, snap)
+    return {"id": snap.id, "episodeId": episode_id, "label": snap.label, "createdAt": snap.created_at, "items": snap.items}
 
 
 __all__ = ["ProviderError"]
