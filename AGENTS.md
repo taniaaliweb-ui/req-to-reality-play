@@ -36,4 +36,9 @@
 - Simulation money uses Decimal per-currency ledgers that must reconcile exactly (opening + income − expenses + gains + transfers = closing); balances convert only with FX evidence in the snapshot.
 - Story, production and receipts are generated without AI from the canonical run, every claim typed by provenance — narrative stays grounded in run data.
 - The MCP server (`app/mcp_server.py`, stdio, no dependencies) exposes only service-backed tools; no snapshot-edit, self-verify or SQL tool.
+- Mortality prefers UN WPP abridged life tables (`providers/un_wpp_lifetable.py`, metrics LT_QX/LT_MX) with formula MORT-LT-ANNUAL; broad measures are a flagged fallback and every hazard stores lineage — age-specific evidence must never be silently bypassed.
+- Simulation rule code may contain no untagged numeric literals: parameters go to the prior registry (with classification/units/provenance in `priors.META`), structural constants carry `# rule:<ID>` registered in `simulation/model_registry.py`; `scan_constants()` is enforced by tests — no hidden model logic.
+- Frozen inputs that predate a registry key fall back to `priors.defaults()` (identical to the former inline values) — old inputs stay reproducible.
+- Research acceptance goes through `services/research_acceptance.py` (reviewer-chosen FACT/ESTIMATE/CONTEXT/ASSUMPTION/REJECT with validated scope); it never touches finalized snapshots and only raises replacement notices — new evidence reaches simulations only via a new snapshot version + rerun.
+- MCP tools carry a risk class and group (`mcp_server.TOOL_META`); PROHIBITED tools are never executable, CONSEQUENTIAL_WRITE calls go through user approval by default (`mcp_approvals`) — agents get the minimum tool set.
 
