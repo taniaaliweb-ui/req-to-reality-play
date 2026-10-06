@@ -19,6 +19,7 @@ import { Route as FactsRouteImport } from './routes/facts'
 import { Route as LaborRouteImport } from './routes/labor'
 import { Route as LifeDataRouteImport } from './routes/life-data'
 import { Route as LifeEvidenceRouteImport } from './routes/life-evidence'
+import { Route as ModelValidationRouteImport } from './routes/model-validation'
 import { Route as ProductionRouteImport } from './routes/production'
 import { Route as ReceiptRouteImport } from './routes/receipt'
 import { Route as ResearchRouteImport } from './routes/research'
@@ -80,6 +81,11 @@ const LifeDataRoute = LifeDataRouteImport.update({
 const LifeEvidenceRoute = LifeEvidenceRouteImport.update({
   id: '/life-evidence',
   path: '/life-evidence',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ModelValidationRoute = ModelValidationRouteImport.update({
+  id: '/model-validation',
+  path: '/model-validation',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProductionRoute = ProductionRouteImport.update({
@@ -154,6 +160,7 @@ export interface FileRoutesByFullPath {
   '/labor': typeof LaborRoute
   '/life-data': typeof LifeDataRoute
   '/life-evidence': typeof LifeEvidenceRoute
+  '/model-validation': typeof ModelValidationRoute
   '/production': typeof ProductionRoute
   '/receipt': typeof ReceiptRoute
   '/research': typeof ResearchRoute
@@ -178,6 +185,7 @@ export interface FileRoutesByTo {
   '/labor': typeof LaborRoute
   '/life-data': typeof LifeDataRoute
   '/life-evidence': typeof LifeEvidenceRoute
+  '/model-validation': typeof ModelValidationRoute
   '/production': typeof ProductionRoute
   '/receipt': typeof ReceiptRoute
   '/research': typeof ResearchRoute
@@ -203,6 +211,7 @@ export interface FileRoutesById {
   '/labor': typeof LaborRoute
   '/life-data': typeof LifeDataRoute
   '/life-evidence': typeof LifeEvidenceRoute
+  '/model-validation': typeof ModelValidationRoute
   '/production': typeof ProductionRoute
   '/receipt': typeof ReceiptRoute
   '/research': typeof ResearchRoute
@@ -229,6 +238,7 @@ export interface FileRouteTypes {
     | '/labor'
     | '/life-data'
     | '/life-evidence'
+    | '/model-validation'
     | '/production'
     | '/receipt'
     | '/research'
@@ -253,6 +263,7 @@ export interface FileRouteTypes {
     | '/labor'
     | '/life-data'
     | '/life-evidence'
+    | '/model-validation'
     | '/production'
     | '/receipt'
     | '/research'
@@ -277,6 +288,7 @@ export interface FileRouteTypes {
     | '/labor'
     | '/life-data'
     | '/life-evidence'
+    | '/model-validation'
     | '/production'
     | '/receipt'
     | '/research'
@@ -302,6 +314,7 @@ export interface RootRouteChildren {
   LaborRoute: typeof LaborRoute
   LifeDataRoute: typeof LifeDataRoute
   LifeEvidenceRoute: typeof LifeEvidenceRoute
+  ModelValidationRoute: typeof ModelValidationRoute
   ProductionRoute: typeof ProductionRoute
   ReceiptRoute: typeof ReceiptRoute
   ResearchRoute: typeof ResearchRoute
@@ -386,6 +399,13 @@ declare module '@tanstack/react-router' {
       path: '/life-evidence'
       fullPath: '/life-evidence'
       preLoaderRoute: typeof LifeEvidenceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/model-validation': {
+      id: '/model-validation'
+      path: '/model-validation'
+      fullPath: '/model-validation'
+      preLoaderRoute: typeof ModelValidationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/production': {
@@ -486,6 +506,7 @@ const rootRouteChildren: RootRouteChildren = {
   LaborRoute: LaborRoute,
   LifeDataRoute: LifeDataRoute,
   LifeEvidenceRoute: LifeEvidenceRoute,
+  ModelValidationRoute: ModelValidationRoute,
   ProductionRoute: ProductionRoute,
   ReceiptRoute: ReceiptRoute,
   ResearchRoute: ResearchRoute,
