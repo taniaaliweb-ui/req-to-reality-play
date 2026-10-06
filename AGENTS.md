@@ -29,5 +29,4 @@
 - Simulation, economics, story and receipt logic for real runs lives in `backend/app/simulation/` (pure engine + rules; services in run.py/product.py); routes, MCP and React only call it.
 - Domain types live in `src/types/lifespan.ts`; all mock data in `src/mock/` and must be labelled as prototype.
 - No auth, no cloud, no Docker; backend binds 127.0.0.1 with localhost-only CORS (local-first requirement).
-
 - Simulation-engine rules: `backend/app/simulation/AGENTS.md`; MCP and research-acceptance rules: `backend/app/AGENTS.md`.
