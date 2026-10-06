@@ -8,7 +8,7 @@
 import type { AssumptionInput, AssumptionRecord, ContextRec, HistoricalEventRec, LifeImportPreview, LifeMatrix, LifeObservation, LifeObsSummary, MatrixCell, MatrixStage, MigrationPathEvidence, PolicyRec, ReadinessV2, SnapshotManifest, AuditResult, BaselineInput, CandidateResult, DatasetSnapshot, EconomicBaseline, EconomicProfile, EconomicProfileInput, EngineResult, EvidenceGap, ExternalObservation, Household, ImportPreview, LifespanDB, LineageNode, ProviderInfo, Readiness, SnapshotDiff, SyncReport, VerifiedEconomics, WageDistribution, WageObservation } from "@/types/lifespan";
 import { buildDemoDB } from "@/mock/demoEpisode";
 import { diffWorkspace, type SyncOp } from "./sync";
-import type { CanonicalStatus, Candidate, DashboardData, InputReview, ProductionResult, Receipt2, SimEvent, SimInput, SimJob, SimPrior, SimRun, SimState, StoryResult } from "@/types/simulation";
+import type { CanonicalStatus, Candidate, DashboardData, McpApproval, McpPermissions, ModelValidation, Replacement, ReviewForm, InputReview, ProductionResult, Receipt2, SimEvent, SimInput, SimJob, SimPrior, SimRun, SimState, StoryResult } from "@/types/simulation";
 
 export type DataMode = "local" | "backend";
 
@@ -92,6 +92,7 @@ export interface SimApi {
 /** Life-context evidence (Phase 5). Backend only. */
 export interface LifeApi {
   syncUnWpp(req: { countries: string[]; yearStart: number; yearEnd: number; indicators?: string[] }): Promise<SyncReport & { projections: number; lifeObservations: number }>;
+  syncLifeTables(req: { countries: string[]; yearStart: number; yearEnd: number; sexes?: string[] }): Promise<SyncReport & { projections: number; lifeObservations: number }>;
   syncLifeTables(req: { countries: string[]; yearStart: number; yearEnd: number; sexes?: string[] }): Promise<SyncReport & { projections: number; lifeObservations: number }>;
   observations(filter?: Record<string, string | number | undefined>): Promise<LifeObservation[]>;
   summary(): Promise<LifeObsSummary[]>;
@@ -285,6 +286,7 @@ export class HttpLifespanApi implements LifespanApi {
     };
     this.life = {
       syncUnWpp: (req) => this.req("POST", "/data/un-wpp/sync", req),
+      syncLifeTables: (req) => this.req("POST", "/data/un-wpp/life-table/sync", req),
       syncLifeTables: (req) => this.req("POST", "/data/un-wpp/life-table/sync", req),
       observations: (f) => this.req("GET", `/life/observations${qs(f)}`),
       summary: () => this.req("GET", "/life/observations/summary"),
