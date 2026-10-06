@@ -248,6 +248,9 @@ def test_mcp_real_client(srv, tmp_path):
     c = srv.client()
     _setup(c)
     inp = _input(c)
+    # Phase 6.1: the default MCP profile is a minimal research agent; this test opts in to every group without approvals
+    assert c.put("/mcp/permissions", json={"profile": "full-local", "enabledGroups": ["Research", "Evidence", "Simulation", "Story", "Production"],
+                                           "consequential": "ALLOW"}).status_code == 200
     st = c.get("/mcp/status").json()
     assert st["status"] == "AVAILABLE" and "run_simulation" in st["tools"]
     env = {**os.environ, "LIFESPAN_DATA_DIR": str(srv.data_dir), "PYTHONPATH": str(BACKEND)}

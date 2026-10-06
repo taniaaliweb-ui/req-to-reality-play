@@ -4,4 +4,4 @@ Pure, deterministic, seeded. Reads ONLY a frozen SimulationInput (built from a f
 snapshot + explicit assumptions + versioned provisional priors). Every state transition produces an
 auditable SimulationEvent with its full probability trace. Outputs are always SIMULATED, never FACT.
 """
-ENGINE_VERSION = "6.0.0"
+ENGINE_VERSION = "6.1.0"

@@ -369,23 +369,90 @@ def list_candidates(db: DB, episode_id: str | None = None, status: str | None = 
         q = q.where(m.CandidateEvidence.episode_id == episode_id)
     if status:
         q = q.where(m.CandidateEvidence.status == status)
-    return [candidate_out(c) for c in db.scalars(q.order_by(m.CandidateEvidence.created_at.desc()).limit(500))]
+    return [candidate_full(c) for c in db.scalars(q.order_by(m.CandidateEvidence.created_at.desc()).limit(500))]
 
 
 class ReviewReq(In):
-    status: str = Field(..., pattern=r"^(ACCEPTED|REJECTED)$")
+    """Human review. acceptAs decides what the research becomes — acceptance never auto-classifies as FACT."""
+    acceptAs: str = Field(..., pattern=r"^(FACT|ESTIMATE|CONTEXT|ASSUMPTION|REJECT)$")
+    country: str = Field("", max_length=8)
+    region: str = Field("", max_length=200)
+    yearStart: int | None = Field(None, ge=1800, le=2100)
+    yearEnd: int | None = Field(None, ge=1800, le=2100)
+    population: str = Field("", max_length=500)
+    value: str | None = Field(None, max_length=120)
+    unit: str | None = Field(None, max_length=120)
+    domain: str = Field("", max_length=40)
+    metric: str = Field("", max_length=200)
+    sex: str = Field("", max_length=10)
+    lifeStage: str | None = Field(None, max_length=40)
+    sourceTitle: str = Field("", max_length=2000)
+    sourceOrganization: str = Field("", max_length=300)
+    sourceType: str = Field("other", max_length=40)
+    reliability: str = Field("Moderate", pattern=r"^(Primary|Strong|Moderate|Weak)$")
+    url: str = Field("", max_length=2000)
+    publicationDate: str = Field("", max_length=40)
+    confidence: str = Field("medium", pattern=r"^(low|medium|high)$")
     note: str = Field("", max_length=4000)
+
+
+def candidate_full(c: m.CandidateEvidence) -> dict:
+    return candidate_out(c) | {"acceptedAs": c.accepted_as, "reviewedScope": c.reviewed_scope, "links": c.links or {}}
 
 
 @router.post("/candidate-evidence/{cid}/review")
 def review_candidate(cid: IdPath, r: ReviewReq, db: DB):
-    """Human review only. Accepting records the decision; turning it into a Fact still goes through the Fact Ledger."""
-    c = db.get(m.CandidateEvidence, cid)
-    if c is None:
-        raise HTTPException(404, "Candidate not found")
-    c.status, c.review_note, c.reviewed_at = r.status, r.note, now_iso()
-    db.commit()
-    return candidate_out(c)
+    from app.services import research_acceptance as ra
+    try:
+        res = ra.review(db, cid, r.model_dump())
+    except LookupError as e:
+        raise HTTPException(404, str(e)) from e
+    except ra.AcceptanceError as e:
+        raise HTTPException(422, str(e)) from e
+    return {"candidate": candidate_full(res["candidate"]), "replacements": [ra.replacement_out(x) for x in res["replacements"]],
+            "gapsReevaluated": res["gapsReevaluated"]}
+
+
+@router.get("/episodes/{eid}/evidence-replacements")
+def list_replacements(eid: IdPath, db: DB):
+    from app.services import research_acceptance as ra
+    return [ra.replacement_out(x) for x in db.scalars(select(m.EvidenceReplacement).where(m.EvidenceReplacement.episode_id == eid)
+                                                      .order_by(m.EvidenceReplacement.created_at.desc()))]
+
+
+class RepSnapReq(In):
+    retireAssumption: bool = False
+
+
+@router.post("/evidence-replacements/{rid}/snapshot")
+def replacement_snapshot(rid: IdPath, r: RepSnapReq, db: DB):
+    from app.services import research_acceptance as ra
+    try:
+        return ra.replacement_out(ra.replacement_snapshot(db, rid, r.retireAssumption))
+    except LookupError as e:
+        raise HTTPException(404, str(e)) from e
+    except ra.AcceptanceError as e:
+        raise HTTPException(409, str(e)) from e
+
+
+@router.post("/evidence-replacements/{rid}/rerun")
+def replacement_rerun(rid: IdPath, db: DB):
+    from app.services import research_acceptance as ra
+    try:
+        return ra.replacement_out(ra.replacement_rerun(db, rid))
+    except LookupError as e:
+        raise HTTPException(404, str(e)) from e
+    except ra.AcceptanceError as e:
+        raise HTTPException(409, str(e)) from e
+
+
+@router.post("/evidence-replacements/{rid}/dismiss")
+def replacement_dismiss(rid: IdPath, db: DB):
+    from app.services import research_acceptance as ra
+    try:
+        return ra.replacement_out(ra.dismiss(db, rid))
+    except LookupError as e:
+        raise HTTPException(404, str(e)) from e
 
 
 @router.get("/research-api/tasks")
@@ -408,6 +475,55 @@ def research_tasks(db: DB, episode_id: str | None = None, status: str | None = "
 def mcp_status():
     from app import mcp_server
     return mcp_server.self_test()
+
+
+class McpConfigReq(In):
+    profile: str = Field("custom", max_length=40)
+    enabledGroups: list[str] = []
+    consequential: str = Field("REQUIRE_APPROVAL", pattern=r"^(REQUIRE_APPROVAL|ALLOW|DENY)$")
+
+
+@router.get("/mcp/permissions")
+def mcp_permissions(db: DB):
+    from app import mcp_server
+    cfg = mcp_server.get_config(db)
+    return {"config": cfg, "tools": mcp_server.tool_catalogue(cfg), "groups": list(mcp_server.GROUPS), "riskClasses": list(mcp_server.RISK),
+            "profiles": mcp_server.PROFILES}
+
+
+@router.put("/mcp/permissions")
+def put_mcp_permissions(r: McpConfigReq, db: DB):
+    from app import mcp_server
+    cfg = mcp_server.put_config(db, r.model_dump())
+    return {"config": cfg, "tools": mcp_server.tool_catalogue(cfg), "groups": list(mcp_server.GROUPS), "riskClasses": list(mcp_server.RISK),
+            "profiles": mcp_server.PROFILES}
+
+
+@router.get("/mcp/approvals")
+def mcp_approvals(db: DB):
+    from app import mcp_server
+    return [mcp_server.approval_out(a) for a in db.scalars(select(m.McpApproval).order_by(m.McpApproval.created_at.desc()).limit(200))]
+
+
+class McpDecision(In):
+    approve: bool
+
+
+@router.post("/mcp/approvals/{aid}/decide")
+def mcp_decide(aid: IdPath, r: McpDecision):
+    from app import mcp_server
+    try:
+        return mcp_server.execute_approval(aid, r.approve)
+    except LookupError as e:
+        raise HTTPException(404, str(e)) from e
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from e
+
+
+@router.get("/model/validation")
+def model_validation(db: DB, episode_id: str | None = None):
+    from app.simulation import validation
+    return validation.report(db, episode_id)
 
 
 @router.get("/orchestration/status")

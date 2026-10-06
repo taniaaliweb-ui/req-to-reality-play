@@ -109,12 +109,17 @@ def character_version(c: dict) -> str:
 
 def _evidence(db: Session, snap: m.EpisodeDatasetSnapshot) -> dict:
     series: dict[str, dict] = {}
+    life_table: dict[str, dict] = {}
     for r in db.scalars(select(m.SnapshotRecord).where(m.SnapshotRecord.snapshot_id == snap.id, m.SnapshotRecord.record_type == "life-observation")):
         p = r.payload
         if p.get("isPrototype"):
             continue
         v = _num(p.get("value"))
         if v is None:
+            continue
+        if p["metric"] in ("LT_QX", "LT_MX"):  # abridged life table: kept by country|sex → year → age-group start
+            cell = life_table.setdefault(f"{p['country']}|{p.get('sex') or 'BOTH'}", {}).setdefault(str(p["year"]), {}).setdefault(str(p.get("age") or "0"), {})
+            cell[p["metric"]] = [str(v), p["id"], p.get("observationType") or "ESTIMATE", p.get("ageGroup") or str(p.get("age"))]
             continue
         key = f"{p['metric']}|{p['country']}|{p.get('sex') or ''}|{p.get('educationLevel') or ''}"
         series.setdefault(key, {})[str(p["year"])] = [str(v), p["id"], p.get("observationType") or "ESTIMATE"]
@@ -152,7 +157,7 @@ def _evidence(db: Session, snap: m.EpisodeDatasetSnapshot) -> dict:
                "end": e.get("endDate"), "verification": e.get("verification") or "unverified"} for e in recs.get("historical-event", [])]
     paths = [{"id": p["id"], "origin": p["origin"], "destination": p["destination"], "yearStart": p["yearStart"], "yearEnd": p["yearEnd"],
               "observationIds": p.get("observationIds") or []} for p in recs.get("migration-path", [])]
-    return {"series": series, "cpi": cpi, "fx": fx, "wageAnchors": anchors, "events": events, "migrationPaths": paths,
+    return {"series": series, "lifeTable": life_table, "cpi": cpi, "fx": fx, "wageAnchors": anchors, "events": events, "migrationPaths": paths,
             "snapshotAssumptions": recs.get("assumption", []), "readiness": (recs.get("readiness") or [None])[0]}
 
 
@@ -211,12 +216,19 @@ def review(p: dict) -> dict:
         reasons: list[str] = []
         ev_ids_n = 0
         if key == "mortality":
+            LT = ev.get("lifeTable") or {}
+            lt_years = max((len({int(y) for y in (LT.get(f"{c}|{sx or 'BOTH'}") or {}) if b <= int(y) <= b + 90}) for c in countries), default=0)
             n = max((_years_with(S, f"Q1560{sx.title()}" if sx else "Q1560Male", c, life, 2) for c in countries), default=0)
             n2 = max((_years_with(S, "IMR", c, range(b, b + 1), 2) for c in countries), default=0)
-            ev_ids_n = n + n2
-            status = "VERIFIED" if n >= len(life) * 0.9 and n2 else "PARTIALLY VERIFIED" if ev_ids_n else "MISSING"
-            reasons.append(f"UN WPP adult mortality (Q15–60) near {n}/{len(life)} life years; infant mortality {'present' if n2 else 'missing'} at birth. "
-                           "Single-age hazards are DERIVED with a Gompertz-slope prior.")
+            ev_ids_n = lt_years + n + n2
+            status = "VERIFIED" if lt_years >= len(life) * 0.9 else "PARTIALLY VERIFIED" if ev_ids_n else "MISSING"
+            if lt_years:
+                reasons.append(f"UN WPP abridged life tables (age-specific nqx, sex {sx or 'BOTH'}) for {lt_years}/{len(life)} life years — preferred; "
+                               "annual hazards = 1−(1−nqx)^(1/n) (MORT-LT-ANNUAL v1).")
+            else:
+                reasons.append("No age-specific life table in the snapshot — sync UN WPP life tables (Life Context Data) and re-snapshot.")
+            reasons.append(f"Broad fallback only where the life table is absent: UN WPP Q15–60 near {n}/{len(life)} years, infant mortality "
+                           f"{'present' if n2 else 'missing'} at birth (Gompertz-slope prior).")
         elif key == "education":
             n = sum(_years_with(S, "enrollment_rate", ch["country"], range(b + 6, b + 23), 3, "", lv) for lv in ("PRIMARY", "SECONDARY", "TERTIARY"))
             ev_ids_n = n

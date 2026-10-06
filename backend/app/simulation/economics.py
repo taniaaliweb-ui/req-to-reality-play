@@ -15,7 +15,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from app.simulation.context import D, q2
-from app.simulation.probability import Prob
+from app.simulation.probability import weakest, Prob
 
 FIELDS = ("cash", "investments", "property", "business", "debt", "mortgage")
 ZERO = Decimal("0.00")
@@ -33,8 +33,8 @@ def _store(st, accs):
     st["acc"] = {c: {k: str(q2(v)) for k, v in a.items()} for c, a in accs.items()}
 
 
-def household_size(st) -> int:
-    kids = sum(1 for b in st["children"] if st["year"] - b < 22)
+def household_size(ctx, st) -> int:
+    kids = sum(1 for b in st["children"] if st["year"] - b < ctx.age_bound("childDependentUntilAge"))
     partner = 1 if st["rel"]["state"] in ("partnered", "married") and (st["rel"].get("partner") or {}).get("alive") else 0
     return 1 + partner + kids
 
@@ -47,15 +47,32 @@ def wage(ctx, st) -> tuple[Decimal, dict | None]:
     if ref is None:
         return ZERO, None
     X = ctx.P("P-WAGE-EXPERIENCE")
-    expf = (D(1) + D(str(X["rate"]))) ** (min(emp.get("experience", 0), X["plateauYears"]) - X["anchorAverageExperience"]) if emp.get("experience", 0) < 200 else D(1)
+    expf = (D(1) + D(str(X["rate"]))) ** (min(emp.get("experience", 0), X["plateauYears"]) - X["anchorAverageExperience"]) if emp.get("experience", 0) < 200 else D(1)  # rule:R-NUMERIC-GUARD
     sen = (D(1) + D(str(ctx.P("P-CAREER-PROMOTION")["raise"]))) ** emp.get("seniority", 0)
     w = ref["annual"] * D(str(emp.get("wageFactor", 1))) * expf * sen
     B = ctx.P("P-CAREER-BUSINESS")
     if emp["state"] == "business_owner":
         w *= D(str(B["selfEmployedIncomeFactor"])) * (D(str(B["successIncomeMultiplier"])) if (emp.get("business") or {}).get("success") else D(1))
     if st["ret"].get("state") == "partial":
-        w *= D("0.5")
-    ref = {**ref, "priorIds": ref["priorIds"] + [ctx.pid("P-WAGE-EXPERIENCE"), ctx.pid("P-CAREER-PROMOTION")]}
+        w *= D(str(ctx.er("partialRetirementIncomeFactor")))
+    chain = list(ref.get("chain") or [])
+    wf = D(str(emp.get("wageFactor", 1)))
+    chain.append({"step": "individual_position", "label": "simulated individual position (drawn at first job; job changes/re-employment adjust it)",
+                  "factor": str(wf), "classification": "SIMULATED", "sourceIds": [ctx.pid("P-WAGE-SPREAD")]})
+    chain.append({"step": "experience", "label": f"experience {min(emp.get('experience', 0), X['plateauYears'])} vs anchor average {X['anchorAverageExperience']}",
+                  "factor": str(round(expf, 6)), "classification": "PROVISIONAL_SYSTEM_PRIOR", "sourceIds": [ctx.pid("P-WAGE-EXPERIENCE")]})
+    if emp.get("seniority", 0):
+        chain.append({"step": "seniority", "label": f"seniority {emp.get('seniority', 0)}", "factor": str(round(sen, 6)), "classification": "PROVISIONAL_SYSTEM_PRIOR",
+                      "sourceIds": [ctx.pid("P-CAREER-PROMOTION")]})
+    if emp["state"] == "business_owner":
+        chain.append({"step": "business", "label": "self-employment / business income factor", "classification": "PROVISIONAL_SYSTEM_PRIOR", "sourceIds": [ctx.pid("P-CAREER-BUSINESS")]})
+    if st["ret"].get("state") == "partial":
+        chain.append({"step": "partial_retirement", "label": "partial retirement income", "factor": str(ctx.er("partialRetirementIncomeFactor")),
+                      "classification": "PROVISIONAL_SYSTEM_PRIOR", "sourceIds": [ctx.pid("P-ECON-RULES")]})
+    chain.append({"step": "final", "label": "final simulated wage", "value": str(q2(w)), "currency": ref["currency"], "classification": "SIMULATED",
+                  "componentClass": ref["class"] if ref["class"] != "EMPIRICAL" else "PROVISIONAL_SYSTEM_PRIOR"})
+    ref = {**ref, "priorIds": ref["priorIds"] + [ctx.pid("P-WAGE-EXPERIENCE"), ctx.pid("P-CAREER-PROMOTION")], "chain": chain,
+           "class": weakest(ref["class"], "PROVISIONAL_SYSTEM_PRIOR")}
     return q2(w), ref
 
 
@@ -99,7 +116,7 @@ def step(ctx, st) -> dict:
         st["lastWage"] = str(w)
     p = st["rel"].get("partner") or {}
     inc["partnerWages"] = ZERO
-    if st["rel"]["state"] in ("partnered", "married") and p.get("alive") and p.get("works") and p.get("age", 0) < 62:
+    if st["rel"]["state"] in ("partnered", "married") and p.get("alive") and p.get("works") and p.get("age", 0) < ctx.age_bound("partnerWorksUntilAge"):
         pref = ctx.ref_wage(st["country"], y, "service")
         if pref:
             inc["partnerWages"] = q2(pref["annual"] * D(str(p["incomeRatio"])))
@@ -125,8 +142,8 @@ def step(ctx, st) -> dict:
     inc.setdefault("interest", ZERO)
     hh_income = inc["wages"] + inc["partnerWages"] + inc["pension"]
     st["lastHouseholdIncome"] = str(hh_income)
-    n = household_size(st)
-    equiv = D(1) + D("0.5") * (n - 1)
+    n = household_size(ctx, st)
+    equiv = D(1) + D(str(ctx.P("P-ACCOUNTING")["equivalenceExtraMember"])) * (n - 1)
     floor = q2(ref_annual * D(str(S["floorOfReferenceWage"])) * equiv)
     base = max(hh_income, floor)
     # ---------------- expenses
@@ -139,7 +156,7 @@ def step(ctx, st) -> dict:
     hs = st["housing"]
     if ha and hs not in ("family_home", "owned", "mortgaged"):
         pa = ha["parsed"]
-        exp["housing"] = q2(D(pa["value"]) * (D(12) if pa.get("period") == "MONTH" else D(1))) if pa["kind"] == "AMOUNT" else q2(base * D(pa["value"]))
+        exp["housing"] = q2(D(pa["value"]) * (D(ctx.P("P-ACCOUNTING")["payPeriodsPerYear"]["MONTH"]) if pa.get("period") == "MONTH" else D(1))) if pa["kind"] == "AMOUNT" else q2(base * D(pa["value"]))
         asm_used.add(ha["id"])
     else:
         exp["housing"] = q2(base * D(str(H["costShare"].get(hs, 0))))
@@ -148,21 +165,22 @@ def step(ctx, st) -> dict:
     fd = ctx.trait("financialDiscipline")
     if sa:
         pa = sa["parsed"]
-        total = q2(D(pa["value"]) * (D(12) if pa.get("period") == "MONTH" else D(1))) if pa["kind"] == "AMOUNT" else q2(base * D(pa["value"]))
-        exp["food"], exp["utilities"], exp["transport"], exp["other"] = q2(total * D("0.45")), q2(total * D("0.12")), q2(total * D("0.13")), q2(total * D("0.30"))
+        total = q2(D(pa["value"]) * (D(ctx.P("P-ACCOUNTING")["payPeriodsPerYear"]["MONTH"]) if pa.get("period") == "MONTH" else D(1))) if pa["kind"] == "AMOUNT" else q2(base * D(pa["value"]))
+        SP = ctx.er("assumedSpendingSplit")
+        exp["food"], exp["utilities"], exp["transport"], exp["other"] = (q2(total * D(str(SP[k]))) for k in ("food", "utilities", "transport", "other"))
         asm_used.add(sa["id"])
     else:
-        exp["food"] = q2(base * D(str(S["food"])) * (D(1) + D("0.25") * (n - 1)) / equiv)
+        exp["food"] = q2(base * D(str(S["food"])) * (D(1) + D(str(ctx.er("foodScaleExtraMember"))) * (n - 1)) / equiv)
         exp["utilities"] = q2(base * D(str(S["utilities"])))
         exp["transport"] = q2(base * D(str(S["transport"])))
-        exp["other"] = q2(base * D(str(S["other"])) * (D(1) - D("0.15") * D(str(round(fd, 6)))))
+        exp["other"] = q2(base * D(str(S["other"])) * (D(1) + D(str(round(ctx.tval("discretionarySpending", "financialDiscipline"), 6)))))
     hp = ctx.P("P-HEALTH-TRANSITIONS")
-    exp["healthcare"] = q2(base * D(str(hp["healthcareShare"].get(st["health"], 0.02))))
-    kids_home = [b for b in st["children"] if y - b < 22]
+    exp["healthcare"] = q2(base * D(str(hp["healthcareShare"].get(st["health"], ctx.er("defaultHealthcareShare")))))
+    kids_home = [b for b in st["children"] if y - b < ctx.age_bound("childDependentUntilAge")]
     exp["childCosts"] = q2(base * D(str(S["childShare"])) * len(kids_home))
-    exp["education"] = q2(base * D(str(S["childEducationShare"])) * sum(1 for b in kids_home if 6 <= y - b <= 21))
+    exp["education"] = q2(base * D(str(S["childEducationShare"])) * sum(1 for b in kids_home if ctx.age_bound("childSchoolStartAge") <= y - b <= ctx.age_bound("childSchoolEndAge")))
     M = ctx.P("P-MIG-OPPORTUNITY")
-    exp["remittancesSent"] = q2(inc["wages"] * D(str(M["remittanceShare"])) * (D(1) + D("0.5") * D(str(round(ctx.trait("familyAttachment"), 6))))) if st["mig"]["abroad"] else ZERO
+    exp["remittancesSent"] = q2(inc["wages"] * D(str(M["remittanceShare"])) * (D(1) + D(str(round(ctx.tval("remittanceShare", "familyAttachment"), 6))))) if st["mig"]["abroad"] else ZERO
     a = accs[cur]
     exp["debtInterest"] = q2(a["debt"] * D(str(FN["debtRate"])))
     mrate = D(str(H["mortgageRate"]))
@@ -263,9 +281,9 @@ def step(ctx, st) -> dict:
         shortfall_steps.append(f"sold investments {sell:.0f}")
     if a["cash"] < 0:
         pr = Prob(FN["familySupport"], "PROVISIONAL_SYSTEM_PRIOR", "family covers part of the shortfall", prior_ids=[ctx.pid("P-FINANCE")])
-        pr.add("family attachment", 0.1 * ctx.trait("familyAttachment"))
+        ctx.tadd(pr, "familySupport")
         if ctx.decide(st, "economics", "family_support", pr, rule="economics.shortfall", what="Receives family support", importance=2):
-            sup = q2(-a["cash"] * D("0.5"))
+            sup = q2(-a["cash"] * D(str(ctx.er("familySupportCoverShare"))))
             inc["familySupport"] = sup
             total_inc += sup
             a["cash"] += sup
@@ -278,7 +296,7 @@ def step(ctx, st) -> dict:
         shortfall_steps.append(f"borrowed {borrow:.0f}")
     # credit limit: lenders stop once debt passes the distress threshold → remaining needs go unmet (deprivation)
     thr = D(str(FN["distressDebtToIncome"])) / D(str(ctx.ctl("downwardRisk")))
-    limit = q2(thr * base * D("1.2"))
+    limit = q2(thr * base * D(str(ctx.er("creditLimitMultipleOfDistress"))))
     if a["debt"] > limit and shortfall_steps and shortfall_steps[-1].startswith("borrowed"):
         unmet = min(a["debt"] - limit, D(shortfall_steps[-1].split()[-1]))
         a["debt"] -= unmet
@@ -292,9 +310,9 @@ def step(ctx, st) -> dict:
     elif st["flags"].get("deprivation") and not shortfall_steps:
         st["flags"]["deprivation"] = False
     # savings allocation
-    buffer = q2(total_exp * D("0.5"))
+    buffer = q2(total_exp * D(str(ctx.er("cashBufferShareOfExpenses"))))
     if a["cash"] > buffer and a["debt"] == 0:
-        share = D(str(round(min(0.9, max(0.0, FN["investShare"] + 0.15 * ctx.trait("riskTolerance"))), 6)))
+        share = D(str(round(min(ctx.er("investShareMax"), max(0.0, FN["investShare"] + ctx.tval("investShare", "riskTolerance"))), 6)))
         mv = q2((a["cash"] - buffer) * share)
         a["cash"] -= mv
         a["investments"] += mv
@@ -307,7 +325,7 @@ def step(ctx, st) -> dict:
                        f"(threshold from prior P-FINANCE ÷ downward-risk control).", rule="economics.distress", importance=3, prior_ids=[ctx.pid("P-FINANCE")],
                        cls="DETERMINISTIC")
         st["flags"]["distress"] = True
-        if st["distressYears"] >= 3 and a["property"] > 0:
+        if st["distressYears"] >= ctx.er("forcedSaleAfterDistressYears") and a["property"] > 0:
             sale = a["property"]
             a["cash"] += sale
             a["property"] = ZERO
@@ -321,7 +339,7 @@ def step(ctx, st) -> dict:
             ctx.record(st, "housing", "forced_sale", f"Property sold ({cur} {sale:.0f}) after {st['distressYears']} years of financial distress; mortgage and debt repaid.",
                        rule="economics.forced_sale", importance=3)
     else:
-        if st["flags"].get("distress") and debt_ratio < thr / 2:
+        if st["flags"].get("distress") and debt_ratio < thr * D(str(ctx.er("distressExitFraction"))):
             ctx.record(st, "economics", "distress_resolved", "Debt back below half the distress threshold.", rule="economics.distress", importance=2)
             st["flags"]["distress"] = False
             st["distressYears"] = 0
@@ -359,5 +377,6 @@ def step(ctx, st) -> dict:
             "reconciliation": recon, "shortfall": shortfall_steps, "notes": notes, "householdSize": n, "subsistenceFloor": str(floor),
             "wageProvenance": None if ref is None else {"class": ref["class"], "anchorId": ref["anchorId"], "anchorYear": ref["anchorYear"], "method": ref["method"],
                                                         "priorIds": ref["priorIds"], "evidenceIds": ref["evidenceIds"], "assumptionIds": ref["assumptionIds"],
-                                                        "grossOrNet": ref["grossOrNet"], "value": "SIMULATED"},
+                                                        "grossOrNet": ref["grossOrNet"], "value": "SIMULATED",
+                                                        "anchorCoverage": ref.get("anchorCoverage"), "chain": ref.get("chain") or []},
             "priorIds": sorted(prior_used), "assumptionIds": sorted(asm_used), "valueStatus": "SIMULATED"}

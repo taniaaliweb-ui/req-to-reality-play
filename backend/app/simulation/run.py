@@ -44,7 +44,7 @@ def event_out(e: m.SimulationEvent) -> dict:
             "probabilitySourceIds": e.probability_source_ids, "factIds": e.fact_ids, "evidenceIds": e.evidence_ids, "assumptionIds": e.assumption_ids,
             "priorIds": e.prior_ids, "ruleId": e.rule_id, "ruleVersion": e.rule_version, "modifiers": e.modifiers,
             "randomDraw": None if e.random_draw is None else float(e.random_draw), "outcome": e.outcome, "occurred": e.occurred, "importance": e.importance,
-            "explanation": e.explanation, "scenarioOverride": e.outcome == "SCENARIO_OVERRIDE", "label": "SIMULATED"}
+            "explanation": e.explanation, "scenarioOverride": e.outcome == "SCENARIO_OVERRIDE", "lineage": e.lineage, "label": "SIMULATED"}
 
 
 def state_out(s: m.AnnualLifeState) -> dict:
@@ -96,7 +96,8 @@ def write_details(db: Session, r: m.LifeSimulationRun, res: dict, full: bool) ->
                                   probability_source_ids=e["probabilitySourceIds"], fact_ids=e["factIds"], evidence_ids=e["evidenceIds"],
                                   assumption_ids=e["assumptionIds"], prior_ids=e["priorIds"], rule_id=e["ruleId"], rule_version=e["ruleVersion"],
                                   modifiers=e["modifiers"], random_draw=None if e["randomDraw"] is None else str(e["randomDraw"]), outcome=e["outcome"],
-                                  occurred=e["occurred"], importance=e["importance"], explanation=e["explanation"], created_at=ts)
+                                  occurred=e["occurred"], importance=e["importance"], explanation=e["explanation"], created_at=ts,
+                                  lineage=e.get("lineage"))
                 for e in res["events"] if full or e["importance"] >= 2])
 
 

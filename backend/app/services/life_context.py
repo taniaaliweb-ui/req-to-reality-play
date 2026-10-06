@@ -11,7 +11,7 @@ import re
 import uuid
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import models as m
@@ -142,7 +142,7 @@ def normalize_un_wpp(db: Session, observations: list[Observation]) -> int:
         r = o.raw
         _upsert(db, "LO:" + o.obs_key, external_observation_id=o.obs_key, domain=r["domain"], metric=o.indicator_code, metric_label=o.indicator_name,
                 value=str(o.value), unit=o.unit, country=o.country_code.upper(), region=None, geo_level="NATIONAL", year=o.year, age=r.get("age"),
-                age_group=r.get("age"), sex=r.get("sex"), population_scope=f"{o.country_name}, whole population" + (f" ({r['sex'].lower()})" if r.get("sex") else ""),
+                age_group=r.get("ageGroup") or r.get("age"), sex=r.get("sex"), population_scope=f"{o.country_name}, whole population" + (f" ({r['sex'].lower()})" if r.get("sex") else ""),
                 observation_type="PROJECTION" if r.get("projection") else "ESTIMATE", provider=o.provider, dataset=o.dataset,
                 source=o.dataset, source_organization=o.source_organization, notes=o.source_note)
         n += 1
@@ -454,7 +454,9 @@ def life_matrix(db: Session, episode_id: str, with_detail: bool = False) -> dict
     plan = stage_plan(db, episode_id)
     loc = plan["loc"]
     countries = sorted({c for s in plan["stages"] for c in s["countries"]})
-    obs = list(db.scalars(select(m.LifeObservation).where(m.LifeObservation.country.in_(countries))))
+    L = m.LifeObservation
+    # Life tables add ~22 age groups per country/sex/year; the matrix only needs one representative row (age 0) to show coverage.
+    obs = list(db.scalars(select(L).where(L.country.in_(countries), or_(L.metric.notin_(["LT_QX", "LT_MX"]), and_(L.metric == "LT_QX", L.age == "0")))))
     wages = list(db.scalars(select(m.WageObservation).where(m.WageObservation.country.in_(countries))))
     econ = list(db.scalars(select(m.EconomicBaseline).where(m.EconomicBaseline.episode_id == episode_id)))
     lbs = list(db.scalars(select(m.LifeStageBaseline).where(m.LifeStageBaseline.episode_id == episode_id)))

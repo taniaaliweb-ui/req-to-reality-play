@@ -58,23 +58,63 @@ class Ctx:
         self.assumptions = payload["assumptions"]
 
     # ----------------------------------------------------------------- registry / config / traits
+    def _prior(self, key: str) -> dict:
+        if key in self.priors:
+            return self.priors[key]
+        # frozen input created before this registry entry existed → code default (identical to the former inline value)
+        from app.simulation.priors import defaults
+        return defaults()[key]
+
     def P(self, key: str) -> dict:
-        return self.priors[key]["parameter"]
+        return self._prior(key)["parameter"]
 
     def pid(self, key: str) -> str:
-        return self.priors[key]["id"]
+        return self._prior(key)["id"]
 
     def prior_enabled(self, key: str) -> bool:
         return key in self.priors and self.priors[key]["enabled"]
 
     def ctl(self, name: str) -> float:
-        v = self.cfg.get(name, 50) / 100
-        return 0.25 + 1.5 * v if name == "outlierIntensity" else 0.5 + v
+        C = self.P("P-CONTROL-SCALING")
+        v = self.cfg.get(name, 50) / 100  # rule:R-SLIDER-NEUTRAL
+        return C["outlierBase"] + C["outlierSlope"] * v if name == "outlierIntensity" else C["neutralOffset"] + v
 
     def trait(self, name: str) -> float:
         tr = self.ch.get("traits") or {}
-        t = tr.get(name, tr.get(next((k for k, v in TRAIT_KEYS.items() if v == name), name), 50))
-        return (2 * (float(t) / 100) - 1) * (1.5 - self.cfg.get("realism", 50) / 100)
+        t = tr.get(name, tr.get(next((k for k, v in TRAIT_KEYS.items() if v == name), name), 50))  # rule:R-SLIDER-NEUTRAL
+        return (2 * (float(t) / 100) - 1) * (self.P("P-CONTROL-SCALING")["realismBase"] - self.cfg.get("realism", 50) / 100)  # rule:R-TRAIT-CENTRE
+
+    # ----------------------------------------------------------------- registry shortcuts (every value is a versioned prior)
+    def age_bound(self, name: str):
+        return self.P("P-AGE-BOUNDS")[name]
+
+    def window(self, name: str):
+        return self.P("P-EVIDENCE-WINDOWS")[name]
+
+    def sm(self, name: str):
+        return self.P("P-STATE-MODIFIERS")[name]
+
+    def er(self, name: str):
+        return self.P("P-ECON-RULES")[name]
+
+    def tval(self, effect: str, trait: str) -> float:
+        return self.P("P-TRAIT-EFFECTS")[effect][trait] * self.trait(trait)
+
+    def tadd(self, pr: Prob, effect: str) -> Prob:
+        for t, coef in self.P("P-TRAIT-EFFECTS")[effect].items():
+            pr.add(f"{t} (trait effect {effect})", coef * self.trait(t), "trait")
+        pid = self.pid("P-TRAIT-EFFECTS")
+        if pid not in pr.prior_ids:
+            pr.prior_ids.append(pid)
+        return pr
+
+    def smod(self, pr: Prob, label: str, name: str, kind: str = "mult") -> Prob:
+        v = self.sm(name)
+        (pr.mult if kind == "mult" else pr.add)(label, v, "state")
+        pid = self.pid("P-STATE-MODIFIERS")
+        if pid not in pr.prior_ids:
+            pr.prior_ids.append(pid)
+        return pr
 
     def rng(self, year: int, domain: str):
         return stream(self.seed, year, domain)
@@ -127,7 +167,7 @@ class Ctx:
     # ----------------------------------------------------------------- event recording
     def record(self, st: dict, domain: str, event_type: str, explanation: str, *, outcome: str = "DETERMINISTIC", cls: str = "DETERMINISTIC",
                rule: str, importance: int = 2, before=None, after=None, pr: Prob | None = None, draw: float | None = None,
-               evidence_ids=(), assumption_ids=(), prior_ids=(), fact_ids=()) -> dict:
+               evidence_ids=(), assumption_ids=(), prior_ids=(), fact_ids=(), lineage: dict | None = None) -> dict:
         e = {"seq": len(self.events), "year": st["year"], "age": st["age"], "domain": domain, "eventType": event_type,
              "stateBefore": before or {}, "stateAfter": after or {}, "probability": None if pr is None else round(pr.final(), 6),
              "baseProbability": None if pr is None else round(pr.base, 6), "probabilityClass": pr.base_class if pr else cls,
@@ -135,7 +175,7 @@ class Ctx:
              "priorIds": list(pr.prior_ids if pr else prior_ids), "factIds": list(pr.fact_ids if pr else fact_ids),
              "modifiers": list(pr.modifiers) if pr else [], "randomDraw": None if draw is None else round(draw, 6), "ruleId": rule, "ruleVersion": "1",
              "outcome": outcome, "occurred": outcome in ("OCCURRED", "FORCED", "DETERMINISTIC", "SCENARIO_OVERRIDE"), "importance": importance,
-             "explanation": explanation, "scenarioOverride": outcome == "SCENARIO_OVERRIDE"}
+             "explanation": explanation, "scenarioOverride": outcome == "SCENARIO_OVERRIDE", "lineage": (pr.lineage if pr else None) or lineage}
         e["probabilitySourceIds"] = e["evidenceIds"] + e["assumptionIds"] + e["priorIds"]
         self.events.append(e)
         return e
@@ -145,7 +185,7 @@ class Ctx:
         draw = self.rng(st["year"], f"{domain}:{event_type}").random()
         p = pr.final()
         ok = draw < p
-        if ok or (record_no and p >= 0.02):
+        if ok or (record_no and p >= 0.02):  # rule:R-WHY-NOT-DISPLAY
             self.record(st, domain, event_type, trace_text(pr, draw, ok, what), outcome="OCCURRED" if ok else "NOT_OCCURRED",
                         rule=rule, importance=importance if ok else 1, before=before, after=after if ok else None, pr=pr, draw=draw)
         return ok
@@ -175,16 +215,17 @@ class Ctx:
                 if mid is None:
                     continue
                 per = (a.get("payPeriod") or "MONTH").upper()
-                k = D(12) if per.startswith("MONTH") else D(52) if per.startswith("WEEK") else D(260) if per.startswith("DAY") else D(2080) if per.startswith("HOUR") else D(1)
+                PP = self.P("P-ACCOUNTING")["payPeriodsPerYear"]
+                k = next((D(n) for unit, n in PP.items() if per.startswith(unit)), D(1))
                 for y in a["years"]:
-                    cands.append({"year": int(y), "annual": mid * k, "low": v[0] * k if len(v) == 2 else None, "high": v[1] * k if len(v) == 2 else None,
+                    cands.append({"year": int(y), "annual": mid * k, "low": v[0] * k if len(v) == 2 else None, "high": v[1] * k if len(v) == 2 else None,  # rule:R-RANGE-PAIR
                                   "cls": a["class"], "id": a["id"], "currency": a["currency"], "grossOrNet": a["grossOrNet"], "occ": self.occ_group(a.get("occupation")),
                                   "evidenceIds": a.get("evidenceIds") or [], "factIds": a.get("factIds") or [], "assumptionIds": []})
         for a in self.assumptions:
             pa = a["parsed"]
             if a["domain"] == "income" and pa["kind"] == "AMOUNT" and pa.get("country") == country:
                 y0, y1 = a.get("yearStart") or year, a.get("yearEnd") or year
-                k = D(12) if pa["period"] == "MONTH" else D(1)
+                k = D(self.P("P-ACCOUNTING")["payPeriodsPerYear"]["MONTH"]) if pa["period"] == "MONTH" else D(1)
                 for y in range(y0, y1 + 1):
                     cands.append({"year": y, "annual": D(pa["value"]) * k, "low": None, "high": None, "cls": "ASSUMPTION_BASED", "id": a["id"],
                                   "currency": pa["currency"], "grossOrNet": "UNKNOWN", "occ": "all", "evidenceIds": [], "factIds": [], "assumptionIds": [a["id"]]})
@@ -192,6 +233,10 @@ class Ctx:
             return None
         c = min(cands, key=lambda x: (abs(x["year"] - year), x["cls"] != "EMPIRICAL", x["year"]))
         val, cls, method, prior_ids, ev_ids = c["annual"], c["cls"], "anchor year", [], list(c["evidenceIds"])
+        cov = "ASSUMED" if c["cls"] == "ASSUMPTION_BASED" else "DIRECT" if c["year"] == year else "OUTSIDE_ANCHOR_YEAR"
+        chain = [{"step": "anchor", "label": f"{'assumption' if c['cls'] == 'ASSUMPTION_BASED' else 'wage anchor'} {c['id']} ({c['year']}, {c['occ']})",
+                  "value": str(q2(val)), "currency": c["currency"], "coverage": cov, "classification": c["cls"],
+                  "sourceIds": c["evidenceIds"] + c["assumptionIds"] + c["factIds"]}]
         factor = D(1)
         if c["year"] != year:
             a, b = self.cpi(country, c["year"]), self.cpi(country, year)
@@ -200,21 +245,28 @@ class Ctx:
                 cls = weakest(cls, "DERIVED_FROM_EMPIRICAL")
                 method = f"CPI-adjusted from {c['year']} anchor (CPI {a[0]:.2f}→{b[0]:.2f})"
                 ev_ids += [a[1], b[1]]
+                chain.append({"step": "temporal", "label": f"CPI {c['year']}→{year}", "factor": str(round(factor, 6)), "classification": "DERIVED_FROM_EMPIRICAL",
+                              "sourceIds": [a[1], b[1]]})
             else:
                 g = D(str(self.P("P-WAGE-NOMINAL-GROWTH")["rate"]))
                 factor = (D(1) + g) ** (year - c["year"]) if year >= c["year"] else D(1) / ((D(1) + g) ** (c["year"] - year))
                 cls = weakest(cls, "PROVISIONAL_SYSTEM_PRIOR")
                 method = f"moved {year - c['year']:+d} years from {c['year']} anchor with nominal-growth prior (no CPI pair)"
                 prior_ids.append(self.pid("P-WAGE-NOMINAL-GROWTH"))
+                chain.append({"step": "temporal", "label": f"nominal-growth prior {g} /yr over {year - c['year']:+d} years (no CPI pair in snapshot)",
+                              "factor": str(round(factor, 6)), "classification": "PROVISIONAL_SYSTEM_PRIOR", "sourceIds": [self.pid("P-WAGE-NOMINAL-GROWTH")]})
         occ = self.P("P-WAGE-OCCUPATION")
         occ_ratio = D(str(occ.get(occupation_group, 1.0))) / D(str(occ.get(c["occ"], 1.0))) if occupation_group != c["occ"] else D(1)
         if occ_ratio != 1:
             prior_ids.append(self.pid("P-WAGE-OCCUPATION"))
             cls = weakest(cls, "PROVISIONAL_SYSTEM_PRIOR")
+            chain.append({"step": "occupation", "label": f"occupation ratio {c['occ']}→{occupation_group}", "factor": str(round(occ_ratio, 6)),
+                          "classification": "PROVISIONAL_SYSTEM_PRIOR", "sourceIds": [self.pid("P-WAGE-OCCUPATION")]})
         return {"annual": val * factor * occ_ratio, "low": c["low"] * factor * occ_ratio if c["low"] is not None else None,
                 "high": c["high"] * factor * occ_ratio if c["high"] is not None else None, "currency": c["currency"], "class": cls, "anchorId": c["id"],
                 "anchorYear": c["year"], "method": method + (f"; occupation ratio {occ_ratio:.2f} ({c['occ']}→{occupation_group})" if occ_ratio != 1 else ""),
-                "priorIds": prior_ids, "evidenceIds": ev_ids, "assumptionIds": c["assumptionIds"], "factIds": c["factIds"], "grossOrNet": c["grossOrNet"]}
+                "priorIds": prior_ids, "evidenceIds": ev_ids, "assumptionIds": c["assumptionIds"], "factIds": c["factIds"], "grossOrNet": c["grossOrNet"],
+                "anchorCoverage": cov, "chain": chain}
 
     def any_ref_wage(self, country: str, year: int) -> dict | None:
         return self.ref_wage(country, year, "all")
@@ -226,6 +278,6 @@ def gompertz_annual(A: float, b: float, age: int) -> float:
     return 1 - math.exp(-H)
 
 
-def gompertz_A_from_q(q: float, b: float, x0: int = 15, x1: int = 60) -> float:
-    H = -math.log(max(1e-9, 1 - q))
+def gompertz_A_from_q(q: float, b: float, x0: int = 15, x1: int = 60) -> float:  # rule:R-UN-AGE-GROUPS
+    H = -math.log(max(1e-9, 1 - q))  # rule:R-NUMERIC-GUARD
     return H * b / (math.exp(b * x1) - math.exp(b * x0))

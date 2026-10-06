@@ -111,13 +111,13 @@ def outcome(payload: dict, states: list[dict], events: list[dict]) -> dict:
     occ = lambda t: any(e["eventType"] == t and e["occurred"] for e in events)  # noqa: E731
     final_cur = last["currency"]
     nw_death = last["economics"]["netWorth"]
-    first30 = next((s for s in states if s["age"] == 30), None)
+    first30 = next((s for s in states if s["age"] == 30), None)  # rule:R-OUTCOME-POSITION
     pos = None
-    if first30 and last["age"] >= 45:
+    if first30 and last["age"] >= 45:  # rule:R-OUTCOME-POSITION
         ref = D(first30["economics"]["subsistenceFloor"] or "1") or D(1)
         a = D(first30["netWorth"]) / ref
         b = D(nw_death.get(final_cur, "0")) / (D(last["economics"]["subsistenceFloor"] or "1") or D(1))
-        pos = "improved" if b - a > 2 else "declined" if a - b > 2 else "stable"
+        pos = "improved" if b - a > 2 else "declined" if a - b > 2 else "stable"  # rule:R-OUTCOME-POSITION
     return {"deathYear": last["year"] if not last["state"]["alive"] else None, "deathAge": last["age"] if not last["state"]["alive"] else None,
             "lifetimeEarnings": L["earnings"], "lifetimeSpending": L["spending"], "peakIncome": L["peakIncome"], "peakNetWorth": L["peakNetWorth"],
             "netWorthAtDeath": nw_death, "finalCurrency": final_cur, "yearsEmployed": L["yearsEmployed"], "yearsUnemployed": L["yearsUnemployed"],

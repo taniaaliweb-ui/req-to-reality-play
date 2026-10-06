@@ -761,6 +761,7 @@ class SimulationEvent(Base):
     importance: Mapped[int] = mapped_column(Integer, default=1)
     explanation: Mapped[str] = mapped_column(Text)
     created_at: Mapped[str] = mapped_column(String(40))
+    lineage: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # Phase 6.1: source → formula → result (mortality, wages)
 
 
 class SimulationJob(Base):
@@ -814,6 +815,38 @@ class CandidateEvidence(Base):
     review_note: Mapped[str] = mapped_column(Text, default="")
     reviewed_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_at: Mapped[str] = mapped_column(String(40))
+    # Phase 6.1 acceptance pipeline: reviewer-validated scope + links to the structured records it produced (original fields above never change)
+    accepted_as: Mapped[str | None] = mapped_column(String(20), nullable=True)  # FACT | ESTIMATE | CONTEXT | ASSUMPTION | REJECT
+    reviewed_scope: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    links: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # sourceId, externalObservationId, lifeObservationId, factId, contextId, assumptionId
+
+
+class EvidenceReplacement(Base):
+    """'New evidence may replace assumption/prior X.' Never applied silently: review → new snapshot version → rerun."""
+    __tablename__ = "evidence_replacements"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    episode_id: Mapped[str] = mapped_column(EP_FK(), index=True)
+    candidate_id: Mapped[str] = mapped_column(String(80))
+    target_kind: Mapped[str] = mapped_column(String(12))  # ASSUMPTION | PRIOR
+    target_id: Mapped[str] = mapped_column(String(120))
+    message: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16), default="OPEN")  # OPEN | SNAPSHOTTED | RERUN | DISMISSED
+    new_snapshot_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    new_run_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[str] = mapped_column(String(40))
+    resolved_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
+
+class McpApproval(Base):
+    """A CONSEQUENTIAL_WRITE MCP call waiting for the user's explicit decision. Executed only after approval."""
+    __tablename__ = "mcp_approvals"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    tool: Mapped[str] = mapped_column(String(60))
+    arguments: Mapped[dict] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(12), default="PENDING")  # PENDING | APPROVED | REJECTED | EXECUTED | FAILED
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[str] = mapped_column(String(40))
+    decided_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
 
 class AgentJob(Base):

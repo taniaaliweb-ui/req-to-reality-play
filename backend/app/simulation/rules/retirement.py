@@ -14,7 +14,7 @@ def _retire(ctx, st, e):
     st["ret"].update(state="retired", age=st["age"], pension=str(q2(last * rate)), pensionCurrency=st["currency"])
     st["emp"]["state"] = "retired"
     st["life"]["retirementAge"] = st["age"]
-    e["explanation"] += f"\nPension: replacement {rate * 100:.0f}% of last wage ({src}) = {st['currency']} {q2(last * rate)}/yr."
+    e["explanation"] += f"\nPension: replacement {rate:.0%} of last wage ({src}) = {st['currency']} {q2(last * rate)}/yr."
     if asm:
         e["assumptionIds"].append(asm["id"])
 
@@ -23,7 +23,7 @@ def step(ctx, st) -> None:
     R = ctx.P("P-RET")
     a, y, emp = st["age"], st["year"], st["emp"]
     if emp["state"] == "retired":
-        if a < 70 and st["health"] == "good":
+        if a < ctx.age_bound("returnToWorkMaxAge") and st["health"] == "good":
             pr = Prob(R["returnToWork"], "PROVISIONAL_SYSTEM_PRIOR", "return to work after retirement", prior_ids=[ctx.pid("P-RET")])
             if ctx.decide(st, "retirement", "return_to_work", pr, rule="retirement.return", what="Returns to part-time work", importance=2):
                 emp["state"] = "employee"
@@ -47,17 +47,17 @@ def step(ctx, st) -> None:
         return
     if a < R["earliest"]:
         return
-    if a >= 75:
-        _retire(ctx, st, ctx.record(st, "retirement", "retirement", "Retires at model cap age 75 (prior P-RET schedule end).", rule="retirement.cap",
+    if a >= ctx.age_bound("retirementCapAge"):
+        _retire(ctx, st, ctx.record(st, "retirement", "retirement", f"Retires at model cap age {a} (prior P-AGE-BOUNDS.retirementCapAge).", rule="retirement.cap",
                                     importance=3, cls="PROVISIONAL_SYSTEM_PRIOR", prior_ids=[ctx.pid("P-RET")]))
         return
     sched = {int(k): v for k, v in R["hazard"].items()}
     base = sched[max(k for k in sched if k <= a)]
     pr = Prob(base, "PROVISIONAL_SYSTEM_PRIOR", f"retirement hazard at age {a}", prior_ids=[ctx.pid("P-RET")])
     if st["health"] in ("major_condition", "chronic_condition"):
-        pr.add(f"health {st['health']}", 0.2 if st["health"] == "major_condition" else 0.05, "state")
+        ctx.smod(pr, f"health {st['health']}", "retireMajorHealthAdd" if st["health"] == "major_condition" else "retireChronicHealthAdd", "add")
     if emp["state"] == "unemployed":
-        pr.add("unemployed near retirement age", 0.15, "state")
+        ctx.smod(pr, "unemployed near retirement age", "retireUnemployedAdd", "add")
     if ctx.decide(st, "retirement", "retirement", pr, rule="retirement.hazard", what=f"Retires at {a}", importance=3,
                   before={"employment": emp["state"]}, after={"employment": "retired"}):
         _retire(ctx, st, ctx.events[-1])
