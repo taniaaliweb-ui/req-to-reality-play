@@ -29,11 +29,4 @@
 - Simulation, economics, story and receipt logic for real runs lives in `backend/app/simulation/` (pure engine + rules; services in run.py/product.py); routes, MCP and React only call it.
 - Domain types live in `src/types/lifespan.ts`; all mock data in `src/mock/` and must be labelled as prototype.
 - No auth, no cloud, no Docker; backend binds 127.0.0.1 with localhost-only CORS (local-first requirement).
-- A simulation reads only a frozen `simulation_inputs` row (finalized snapshot + snapshot assumptions + locked events + prior registry version; DB trigger blocks updates) — same input + seed + engine version must reproduce the same life.
-- Randomness is one stream per (seed, year, domain) (`simulation/random.py`) — reproducible after restarts and lets branches resume mid-life.
-- Every default probability/parameter is a versioned row in `simulation_priors`; rules never hard-code new probabilities — priors stay visible, editable and auditable.
-- Every stochastic transition stores a `simulation_events` row with base → modifiers → final → draw and its evidence/assumption/prior ids; missing critical dimensions BLOCK instead of being filled.
-- Simulation money uses Decimal per-currency ledgers that must reconcile exactly (opening + income − expenses + gains + transfers = closing); balances convert only with FX evidence in the snapshot.
-- Story, production and receipts are generated without AI from the canonical run, every claim typed by provenance — narrative stays grounded in run data.
-- The MCP server (`app/mcp_server.py`, stdio, no dependencies) exposes only service-backed tools; no snapshot-edit, self-verify or SQL tool.
-
+- Simulation-engine rules: `backend/app/simulation/AGENTS.md`; MCP and research-acceptance rules: `backend/app/AGENTS.md`.

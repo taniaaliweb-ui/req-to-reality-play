@@ -187,7 +187,9 @@ def detect_replacements(db: Session, c: m.CandidateEvidence) -> list[m.EvidenceR
             continue
         out.append(m.EvidenceReplacement(id="REP-" + uuid.uuid4().hex[:8], episode_id=eid, candidate_id=c.id, target_kind="ASSUMPTION", target_id=a.id,
                                          message=f"New evidence may replace assumption {a.id} (\"{a.claim[:80]}\"): {c.id} — {sc.get('metric') or c.claim[:60]} "
-                                                 f"{sc.get('value')} {sc.get('unit')} ({sc.get('country')} {ys}–{ye}).", status="OPEN", created_at=ts))
+                                                 f"{sc.get('value')} {sc.get('unit')} ({sc.get('country')} {ys}–{ye})."
+                                                 + (" Income evidence feeds the simulation only once approved as a wage baseline (Employment Evidence); "
+                                                    "retiring this assumption before that will block the rerun." if dom == "income" else ""), status="OPEN", created_at=ts))
     from app.simulation import priors as pri
     act = {p.key: p for p in pri.active(db)}
     for k in DOMAIN_PRIORS.get(dom, []):

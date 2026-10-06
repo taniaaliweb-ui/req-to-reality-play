@@ -238,7 +238,8 @@ export function ReplacementPanel({ eid, nonce }: { eid: string; nonce?: number }
           <span className="flex-1">{r.message}</span><span className="chip">{r.status}</span>
           {r.newSnapshotId && <span className="data">snapshot {r.newSnapshotId}</span>}{r.newRunId && <span className="data">run {r.newRunId}</span>}
           {r.status === "OPEN" && <>
-            <button className="btn-ghost" disabled={busy === r.id} onClick={() => act(r.id, () => sim.replacementSnapshot(r.id, r.targetKind === "ASSUMPTION"))}>{r.targetKind === "ASSUMPTION" ? "Retire assumption + new snapshot version" : "Create new snapshot version"}</button>
+            <button className="btn-ghost" disabled={busy === r.id} onClick={() => act(r.id, () => sim.replacementSnapshot(r.id, false))}>Create new snapshot version</button>
+            {r.targetKind === "ASSUMPTION" && <button className="btn-ghost" disabled={busy === r.id} onClick={() => act(r.id, () => sim.replacementSnapshot(r.id, true))}>Retire assumption + new snapshot version</button>}
             <button className="btn-ghost" onClick={() => act(r.id, () => sim.replacementDismiss(r.id))}>Dismiss</button></>}
           {r.status === "SNAPSHOTTED" && <button className="btn-primary" disabled={busy === r.id} onClick={() => act(r.id, () => sim.replacementRerun(r.id))}>{busy === r.id ? "Running…" : "Rerun simulation on new snapshot"}</button>}
         </div>
@@ -269,9 +270,9 @@ export function CandidateEvidencePanel({ eid }: { eid: string }) {
             <div className="flex items-center gap-2 px-3 py-2 text-xs">
               <span className="data">{c.id}</span><span className="flex-1">{c.claim} {c.value && `= ${c.value} ${c.unit}`} <span className="text-muted-foreground">({c.source}, by {c.submittedBy})</span></span>
               <span className="chip">{c.status}{c.acceptedAs && c.acceptedAs !== "REJECT" ? ` · ${c.acceptedAs}` : ""}</span>
-              {c.links && Object.keys(c.links).length > 0 && <span className="data text-[10px] text-muted-foreground">{Object.entries(c.links).map(([k, v]) => `${k}: ${v}`).join(" · ")}</span>}
               {c.status === "PENDING_REVIEW" && <button className="btn-ghost" onClick={() => setOpen(open === c.id ? null : c.id)}>{open === c.id ? "Close" : "Review"}</button>}
             </div>
+            {c.links && Object.keys(c.links).length > 0 && <div className="data break-all px-3 pb-2 text-[10px] text-muted-foreground">Created: {Object.entries(c.links).map(([k, v]) => `${k} ${v}`).join(" · ")}</div>}
             {open === c.id && <ReviewDialog c={c} onDone={(m) => { setMsg(m); setOpen(null); setNonce((n) => n + 1); void refresh(); }} />}
           </div>
         ))}

@@ -127,3 +127,10 @@ FACT · ESTIMATE · ASSUMPTION · DERIVED · SIMULATION · STORY are always visu
 - The canonical life feeds the Timeline (SIMULATED events), Story Engine (structured local draft, no AI), Production (script editor + scenes), Life Receipt 2.0 and exports (JSON archive, CSV, Markdown, printable HTML → Print / Save as PDF).
 - Local MCP server: `cd backend && python -m app.mcp_server` (stdio). System Status shows AVAILABLE only after a real handshake.
 - Tests: `cd backend && python -m pytest` (Phase 6: `tests/test_simulation.py`).
+
+## Phase 6.1 — model hardening
+- Mortality uses UN WPP age-specific life tables (Life Context Data → "Fetch UN age-specific life tables", two official ~145 MB files, cached offline) and records full lineage per year.
+- Every model parameter is in the versioned registry with a classification; see **Model Validation** (sidebar) and Settings → Model priors.
+- Research review: Research → Candidate evidence → Review (FACT / ESTIMATE / CONTEXT / ASSUMPTION / REJECT) → replacement notices → new snapshot version → rerun.
+- MCP permissions and approvals: System Status. Default profile = external research agent (Research + Evidence, consequential writes need approval).
+- Script editor: Undo/Redo buttons, Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z.
