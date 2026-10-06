@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useLifespan } from "@/hooks/useLifespan";
 import { Field, PageHeader } from "@/components/lifespan/primitives";
@@ -50,6 +50,11 @@ function Settings() {
     <>
       <PageHeader eyebrow="System" title="Settings" />
       <div className="grid max-w-3xl gap-6">
+        <section className="panel space-y-2 p-5 text-sm">
+          <div className="eyebrow">Model priors</div>
+          <p className="text-xs text-muted-foreground">Every model parameter (probabilities, multipliers, age bounds, spending shares, accounting conventions) is a versioned registry entry with a classification: EMPIRICAL, DERIVED, USER_ASSUMPTION, PROVISIONAL_MODEL_PRIOR or DETERMINISTIC_ACCOUNTING_RULE.</p>
+          <div className="flex gap-2"><Link to="/simulation" className="btn">Edit model priors (Simulation → Prior registry)</Link><Link to="/model-validation" className="btn">Open Model Validation report</Link></div>
+        </section>
         <section className="panel space-y-2 p-5 text-sm">
           <div className="eyebrow">Data mode</div>
           <div>
