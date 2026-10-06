@@ -30,7 +30,7 @@ export function useTextHistory(key: string, source: string | undefined) {
     try {
       const saved = sessionStorage.getItem(sk);
       const parsed = saved ? (JSON.parse(saved) as History & { base: string }) : null;
-      setH(parsed && parsed.base === source ? parsed : init(source));
+      setH((x) => (parsed && parsed.base === source ? parsed : x.present === source ? x : init(source)));
     } catch {
       setH(init(source));
     }
