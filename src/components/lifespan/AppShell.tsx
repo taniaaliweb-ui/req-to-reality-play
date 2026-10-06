@@ -7,7 +7,7 @@ import {
   Factory,
   Lock,
   Layers,
-  Globe2,, FlaskConical } from "lucide-react";
+  Globe2, FlaskConical } from "lucide-react";
 import { useLifespan } from "@/hooks/useLifespan";
 import { STAGE_LABELS, WORKFLOW_STAGES } from "@/types/lifespan";
 import { cn } from "@/lib/utils";
