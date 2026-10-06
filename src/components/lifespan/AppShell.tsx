@@ -7,8 +7,7 @@ import {
   Factory,
   Lock,
   Layers,
-  Globe2,
-} from "lucide-react";
+  Globe2,, FlaskConical } from "lucide-react";
 import { useLifespan } from "@/hooks/useLifespan";
 import { STAGE_LABELS, WORKFLOW_STAGES } from "@/types/lifespan";
 import { cn } from "@/lib/utils";
@@ -32,6 +31,7 @@ const NAV = [
   { to: "/audits", label: "Audits", icon: ShieldCheck },
   { to: "/production", label: "Production", icon: Clapperboard },
   { to: "/receipt", label: "Life Receipt", icon: Receipt },
+  { to: "/model-validation", label: "Model Validation", icon: FlaskConical },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
