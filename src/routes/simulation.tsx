@@ -8,7 +8,7 @@ import { CONTROL_LABELS } from "@/lib/defaults";
 import { cn } from "@/lib/utils";
 import { pageHead } from "@/lib/seo";
 import { lifespanApi } from "@/services/lifespanApi";
-import type { SimEvent, SimJob, SimPrior, SimRun, SimState } from "@/types/simulation";
+import type { Lineage, SimEvent, SimJob, SimPrior, SimRun, SimState, WageStep } from "@/types/simulation";
 
 export const Route = createFileRoute("/simulation")({
   head: pageHead("Simulation", "Run reproducible simulated lives from frozen evidence, assumptions and visible provisional priors."),
