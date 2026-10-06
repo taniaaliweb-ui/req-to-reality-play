@@ -15,6 +15,34 @@ from sqlalchemy.orm import Session
 from app.db import models as m
 
 LABEL = "Provisional model prior — not externally validated"
+CLASSIFICATIONS = ["EMPIRICAL", "DERIVED", "USER_ASSUMPTION", "PROVISIONAL_MODEL_PRIOR", "DETERMINISTIC_ACCOUNTING_RULE"]
+CLASS_LABEL = {"PROVISIONAL_MODEL_PRIOR": LABEL, "DERIVED": "Derived method — transforms empirical evidence with a documented formula",
+               "DETERMINISTIC_ACCOUNTING_RULE": "Deterministic accounting rule / convention — not a probability",
+               "EMPIRICAL": "Empirical — taken from snapshot evidence", "USER_ASSUMPTION": "User assumption"}
+# key → (classification, units, provenance). Anything not listed is a PROVISIONAL_MODEL_PRIOR with provenance "LifeSpan model default".
+META: dict[str, tuple[str, dict, str]] = {
+    "P-MORT-LT": ("DERIVED", {"maxYearDistance": "years"}, "UN WPP 2024 abridged life tables; formula MORT-LT-ANNUAL v1"),
+    "P-MORT-GOMPERTZ": ("PROVISIONAL_MODEL_PRIOR", {"b": "per year of age", "maxAnnualHazard": "probability/yr", "maxAge": "years"},
+                        "Broad-measure fallback only (used when no life table is in the snapshot); level from UN WPP Q15–60"),
+    "P-ACCOUNTING": ("DETERMINISTIC_ACCOUNTING_RULE", {"payPeriodsPerYear": "periods/yr", "equivalenceExtraMember": "adult-equivalents"},
+                     "Accounting convention (OECD-modified-style equivalence)"),
+    "P-EDU-DURATION": ("DETERMINISTIC_ACCOUNTING_RULE", {"startAge": "years", "primary": "years", "secondary": "years", "tertiary": "years"},
+                       "School-system convention (not country evidence)"),
+    "P-EVIDENCE-WINDOWS": ("PROVISIONAL_MODEL_PRIOR", {"*": "years"}, "LifeSpan model default"),
+    "P-AGE-BOUNDS": ("PROVISIONAL_MODEL_PRIOR", {"*": "years of age"}, "LifeSpan model default"),
+    "P-TRAIT-EFFECTS": ("PROVISIONAL_MODEL_PRIOR", {"*": "probability points per centred trait unit"}, "LifeSpan model default"),
+    "P-CONTROL-SCALING": ("PROVISIONAL_MODEL_PRIOR", {"*": "multiplier"}, "LifeSpan model design"),
+}
+DEFAULT_UNITS = {"p": "probability/yr", "rate": "per year", "share": "share of income", "factor": "multiplier"}
+
+
+def meta(key: str) -> tuple[str, dict, str]:
+    return META.get(key, ("PROVISIONAL_MODEL_PRIOR", {}, "LifeSpan model default — not externally validated"))
+
+
+def defaults() -> dict[str, dict]:
+    """Code defaults by key. Frozen inputs created before a prior existed fall back to these (legacy-identical values)."""
+    return {k: {"key": k, "id": f"{k}@default", "parameter": param, "enabled": True} for k, _d, _n, _de, param, _c, _no in DEFAULT_PRIORS}
 
 # key, domain, name, description, parameter, conditions, notes
 DEFAULT_PRIORS: list[tuple[str, str, str, str, dict, dict, str]] = [
@@ -109,6 +137,51 @@ DEFAULT_PRIORS: list[tuple[str, str, str, str, dict, dict, str]] = [
      {"financial-crisis": {"jobLoss": 2.0, "investReturn": -0.25}, "oil-shock": {"jobLoss": 1.4, "investReturn": -0.1},
       "currency-crisis": {"jobLoss": 1.5, "investReturn": -0.15}, "pandemic": {"jobLoss": 1.8, "investReturn": -0.05, "migration": 0.3},
       "war": {"jobLoss": 1.8, "migration": 0.5}, "natural-disaster": {"assetLoss": 0.05}, "policy-change": {}}, {}, ""),
+    # ---- Phase 6.1: every consequential constant formerly inside rule code
+    ("P-MORT-LT", "mortality", "Age-specific mortality from life tables (method)",
+     "Annual death probability at age x = 1 − (1 − nqx)^(1/n) for the UN WPP abridged age group containing x (constant hazard within the group); "
+     "open group 100+: 1 − exp(−mx). Uses the life-table year nearest the simulated year within maxYearDistance.",
+     {"maxYearDistance": 2}, {"ages": "all"}, "Formula MORT-LT-ANNUAL v1. The only parameter is the year tolerance."),
+    ("P-EVIDENCE-WINDOWS", "evidence", "Nearest-year tolerance for evidence lookups",
+     "How far (years) a rule may look from the simulated year for a population statistic before treating it as missing.",
+     {"mortalityBroad": 2, "enrollment": 3, "fertility": 2, "fx": 1, "migrationPathYears": 5}, {}, "Beyond the window the statistic is MISSING (never interpolated)."),
+    ("P-TRAIT-EFFECTS", "traits", "Character trait effects",
+     "Additive probability points per centred trait c = 2·trait/100 − 1 (scaled by realism). Multiplicative/allocation effects are noted per key.",
+     {"firstJob": {"aptitude": 0.05, "socialSkills": 0.05}, "reemploy": {"socialSkills": 0.08, "resilience": 0.06}, "businessSuccess": {"aptitude": 0.01},
+      "jobLoss": {"discipline": -0.012}, "businessStart": {"riskTolerance": 0.012, "ambition": 0.008}, "promotion": {"ambition": 0.04, "aptitude": 0.03},
+      "primaryEntry": {"aptitude": 0.08}, "secondaryEntry": {"aptitude": 0.08}, "tertiaryEntry": {"aptitude": 0.15, "ambition": 0.06},
+      "dropout": {"discipline": -0.02}, "birth": {"familyAttachment": 0.01}, "healthRecovery": {"resilience": 0.1},
+      "homePurchase": {"financialDiscipline": 0.03}, "returnMigration": {"familyAttachment": 0.03},
+      "migration": {"migrationWillingness": 0.025, "familyAttachment": -0.015}, "newPartnership": {"socialSkills": 0.04},
+      "familySupport": {"familyAttachment": 0.1}, "investShare": {"riskTolerance": 0.15}, "discretionarySpending": {"financialDiscipline": -0.15},
+      "remittanceShare": {"familyAttachment": 0.5}}, {}, "investShare / discretionarySpending / remittanceShare are allocation effects, not probabilities."),
+    ("P-STATE-MODIFIERS", "state", "Life-state modifiers",
+     "Effects of the simulated state (distress, unemployment, marriage, health, business history) on other transitions.",
+     {"reemployWageFactor": 0.95, "businessRevalueMultiplier": 2.0, "businessFailAfterSuccessFactor": 0.4, "dropoutDistressMultiplier": 1.5,
+      "tertiaryEntryDistressMultiplier": 0.6, "cohabitingFertilityMultiplier": 0.6, "distressFertilityMultiplier": 0.7, "separationDistressMultiplier": 1.5,
+      "leaveHomeMarriedAdd": 0.3, "migrateUnemployedAdd": 0.02, "returnUnemployedAbroadAdd": 0.1, "wageOpportunityMinRatio": 1.5,
+      "wageOpportunityPerRatio": 0.006, "wageOpportunityCap": 0.03, "migrationFailureCostYears": 0.25, "retireMajorHealthAdd": 0.2,
+      "retireChronicHealthAdd": 0.05, "retireUnemployedAdd": 0.15, "healthProgressionMultiplier": 3.0, "enrollmentCap": 0.98, "maxMigrations": 2}, {}, ""),
+    ("P-AGE-BOUNDS", "ages", "Age bounds used by rules",
+     "Ages at which rules start/stop applying. Conventions, not evidence.",
+     {"adulthood": 18, "healthModelMinAge": 15, "healthReferenceAge": 30, "purchaseMinAge": 25, "purchaseMaxAge": 65, "businessMinAge": 25,
+      "businessMaxAge": 60, "partnershipMaxAge": 60, "partnerMinAge": 16, "partnerAgeOffsetMin": -4, "partnerAgeOffsetMax": 3, "inheritanceMinAge": 30,
+      "inheritanceMaxAge": 65, "retirementCapAge": 75, "returnToWorkMaxAge": 70, "partnerWorksUntilAge": 62, "childDependentUntilAge": 22,
+      "childSchoolStartAge": 6, "childSchoolEndAge": 21, "lockedFirstJobMinAge": 12}, {}, ""),
+    ("P-ECON-RULES", "household_spending", "Household economics rules",
+     "Spending split, partial retirement, shortfall handling, credit limit and savings allocation.",
+     {"partialRetirementIncomeFactor": 0.5, "assumedSpendingSplit": {"food": 0.45, "utilities": 0.12, "transport": 0.13, "other": 0.3},
+      "foodScaleExtraMember": 0.25, "defaultHealthcareShare": 0.02, "familySupportCoverShare": 0.5, "creditLimitMultipleOfDistress": 1.2,
+      "cashBufferShareOfExpenses": 0.5, "investShareMax": 0.9, "assetLossShockScale": 20.0,
+      "forcedSaleAfterDistressYears": 3, "distressExitFraction": 0.5}, {},
+     "assumedSpendingSplit applies only when a spending ASSUMPTION gives a total."),
+    ("P-CONTROL-SCALING", "controls", "Scenario control scaling",
+     "Control value v ∈ [0,1] (slider/100) → multiplier neutralOffset + v; outlier intensity → outlierBase + outlierSlope·v; trait scale = realismBase − realism/100.",
+     {"neutralOffset": 0.5, "outlierBase": 0.25, "outlierSlope": 1.5, "realismBase": 1.5}, {}, "At the default slider (50) every multiplier is 1.0."),
+    ("P-ACCOUNTING", "accounting", "Accounting conventions",
+     "Pay-period annualisation and household equivalence scale (OECD-modified style: 1 + 0.5 per additional member). Deterministic, not probabilities.",
+     {"payPeriodsPerYear": {"MONTH": 12, "WEEK": 52, "DAY": 260, "HOUR": 2080}, "equivalenceExtraMember": 0.5}, {},
+     "DAY assumes 260 working days; HOUR assumes 2,080 hours (40 h × 52 weeks)."),
 ]
 
 
@@ -119,7 +192,7 @@ def registry_version(priors: list[dict]) -> str:
 def prior_out(p: m.SimulationPrior) -> dict:
     return {"id": p.id, "key": p.key, "version": p.version, "domain": p.domain, "name": p.name, "description": p.description, "parameter": p.parameter,
             "conditions": p.conditions, "sourceType": p.source_type, "notes": p.notes, "enabled": p.enabled, "active": p.active,
-            "label": LABEL, "createdAt": p.created_at, "updatedAt": p.updated_at}
+            "classification": meta(p.key)[0], "units": meta(p.key)[1], "provenance": meta(p.key)[2], "label": CLASS_LABEL[meta(p.key)[0]], "createdAt": p.created_at, "updatedAt": p.updated_at}
 
 
 def seed_priors(db: Session, ts: str) -> None:

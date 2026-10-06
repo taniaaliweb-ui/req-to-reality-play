@@ -40,6 +40,7 @@ def audit_run(payload: dict, states: list[dict], events: list[dict]) -> list[dic
             add("impossible-age", "error", f"First job at age {e['age']}", e["year"])
         if e["eventType"] == "marriage" and e["occurred"] and e["age"] < 16:
             add("impossible-age", "error", f"Marriage at age {e['age']}", e["year"])
+    broad_seen: set = set()
     for s in states:
         st, econ = s["state"], s["economics"]
         if s["age"] != s["year"] - b:
@@ -56,6 +57,16 @@ def audit_run(payload: dict, states: list[dict], events: list[dict]) -> list[dic
             add("gross-net-unknown", "warning", f"{s['year']}: wage anchor gross/net unknown — tax prior applied to a value of unknown basis", s["year"])
         if st["emp"].get("occupation") == "professional" and st["edu"]["level"] not in ("tertiary",) and st["edu"]["state"] == "completed":
             add("occupation-inconsistency", "warning", f"{s['year']}: professional occupation without tertiary education", s["year"])
+        ml = st.get("mortality") or {}
+        if ml and not ml.get("ageSpecificAvailable") and ml.get("country") not in broad_seen:
+            broad_seen.add(ml.get("country"))
+            add("mortality-broad-fallback", "warning", f"{s['year']}: no age-specific life table in the snapshot for {ml.get('country')} — broad measure "
+                f"({ml.get('sourceIndicator')}, {ml.get('formulaId')}) used. Sync UN WPP life tables and re-snapshot.", s["year"])
+        if ml and ml.get("annualProbability") is None:
+            add("mortality-lineage", "error", f"{s['year']}: mortality hazard has no annual probability lineage", s["year"])
+        for step in (wp or {}).get("chain") or []:
+            if step["step"] == "final" and step.get("classification") != "SIMULATED":
+                add("wage-marked-evidence", "error", f"{s['year']}: final wage not labelled SIMULATED", s["year"])
         if econ.get("valueStatus") != "SIMULATED":
             add("simulation-marked-fact", "error", f"{s['year']}: economic values not labelled SIMULATED", s["year"])
     kids = [e for e in events if e["eventType"] == "child_born" and e["occurred"]]

@@ -8,7 +8,7 @@
 import type { AssumptionInput, AssumptionRecord, ContextRec, HistoricalEventRec, LifeImportPreview, LifeMatrix, LifeObservation, LifeObsSummary, MatrixCell, MatrixStage, MigrationPathEvidence, PolicyRec, ReadinessV2, SnapshotManifest, AuditResult, BaselineInput, CandidateResult, DatasetSnapshot, EconomicBaseline, EconomicProfile, EconomicProfileInput, EngineResult, EvidenceGap, ExternalObservation, Household, ImportPreview, LifespanDB, LineageNode, ProviderInfo, Readiness, SnapshotDiff, SyncReport, VerifiedEconomics, WageDistribution, WageObservation } from "@/types/lifespan";
 import { buildDemoDB } from "@/mock/demoEpisode";
 import { diffWorkspace, type SyncOp } from "./sync";
-import type { CanonicalStatus, Candidate, DashboardData, InputReview, ProductionResult, Receipt2, SimEvent, SimInput, SimJob, SimPrior, SimRun, SimState, StoryResult } from "@/types/simulation";
+import type { CanonicalStatus, Candidate, DashboardData, McpApproval, McpPermissions, ModelValidation, Replacement, ReviewForm, InputReview, ProductionResult, Receipt2, SimEvent, SimInput, SimJob, SimPrior, SimRun, SimState, StoryResult } from "@/types/simulation";
 
 export type DataMode = "local" | "backend";
 
@@ -75,7 +75,16 @@ export interface SimApi {
   exportUrl(episodeId: string, kind: "ledger.csv" | "story.md" | "printable.html"): string;
   candidates(episodeId?: string): Promise<Candidate[]>;
   submitCandidate(c: Record<string, unknown>): Promise<Candidate>;
-  reviewCandidate(id: string, status: "ACCEPTED" | "REJECTED", note?: string): Promise<Candidate>;
+  reviewCandidate(id: string, form: ReviewForm): Promise<{ candidate: Candidate; replacements: Replacement[]; gapsReevaluated: boolean }>;
+  replacements(episodeId: string): Promise<Replacement[]>;
+  replacementSnapshot(id: string, retireAssumption: boolean): Promise<Replacement>;
+  replacementRerun(id: string): Promise<Replacement>;
+  replacementDismiss(id: string): Promise<Replacement>;
+  mcpPermissions(): Promise<McpPermissions>;
+  saveMcpPermissions(cfg: McpPermissions["config"]): Promise<McpPermissions>;
+  mcpApprovals(): Promise<McpApproval[]>;
+  decideMcpApproval(id: string, approve: boolean): Promise<McpApproval>;
+  validation(episodeId?: string): Promise<ModelValidation>;
   mcpStatus(): Promise<{ status: string; tools: string[]; detail: string; command?: string; cwd?: string; aiIntegrations?: string }>;
   orchestration(): Promise<{ active: boolean; defaultProvider: string; roles: { role: string; provider: string }[]; providers: { provider: string; status: string }[]; note: string }>;
 }
@@ -83,6 +92,7 @@ export interface SimApi {
 /** Life-context evidence (Phase 5). Backend only. */
 export interface LifeApi {
   syncUnWpp(req: { countries: string[]; yearStart: number; yearEnd: number; indicators?: string[] }): Promise<SyncReport & { projections: number; lifeObservations: number }>;
+  syncLifeTables(req: { countries: string[]; yearStart: number; yearEnd: number; sexes?: string[] }): Promise<SyncReport & { projections: number; lifeObservations: number }>;
   observations(filter?: Record<string, string | number | undefined>): Promise<LifeObservation[]>;
   summary(): Promise<LifeObsSummary[]>;
   importPreview(provider: ImportProvider, csv: string): Promise<LifeImportPreview>;
@@ -275,6 +285,7 @@ export class HttpLifespanApi implements LifespanApi {
     };
     this.life = {
       syncUnWpp: (req) => this.req("POST", "/data/un-wpp/sync", req),
+      syncLifeTables: (req) => this.req("POST", "/data/un-wpp/life-table/sync", req),
       observations: (f) => this.req("GET", `/life/observations${qs(f)}`),
       summary: () => this.req("GET", "/life/observations/summary"),
       importPreview: (provider, csv) => this.req("POST", "/life/import/preview", { provider, csv }),
@@ -333,7 +344,16 @@ export class HttpLifespanApi implements LifespanApi {
       exportUrl: (eid, kind) => `${this.baseUrl}/api/v1${ep(eid)}/export/${kind}`,
       candidates: (eid) => this.req("GET", `/candidate-evidence${qs({ episode_id: eid })}`),
       submitCandidate: (c) => this.req("POST", "/candidate-evidence", c),
-      reviewCandidate: (id, status, note = "") => this.req("POST", `/candidate-evidence/${enc(id)}/review`, { status, note }),
+      reviewCandidate: (id, form) => this.req("POST", `/candidate-evidence/${enc(id)}/review`, form),
+      replacements: (eid) => this.req("GET", `${ep(eid)}/evidence-replacements`),
+      replacementSnapshot: (id, retireAssumption) => this.req("POST", `/evidence-replacements/${enc(id)}/snapshot`, { retireAssumption }),
+      replacementRerun: (id) => this.req("POST", `/evidence-replacements/${enc(id)}/rerun`),
+      replacementDismiss: (id) => this.req("POST", `/evidence-replacements/${enc(id)}/dismiss`),
+      mcpPermissions: () => this.req("GET", "/mcp/permissions"),
+      saveMcpPermissions: (cfg) => this.req("PUT", "/mcp/permissions", cfg),
+      mcpApprovals: () => this.req("GET", "/mcp/approvals"),
+      decideMcpApproval: (id, approve) => this.req("POST", `/mcp/approvals/${enc(id)}/decide`, { approve }),
+      validation: (eid) => this.req("GET", `/model/validation${qs({ episode_id: eid })}`),
       mcpStatus: () => this.req("GET", "/mcp/status"),
       orchestration: () => this.req("GET", "/orchestration/status"),
     };

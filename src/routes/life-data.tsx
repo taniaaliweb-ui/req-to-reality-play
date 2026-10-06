@@ -76,12 +76,16 @@ function LifeData() {
             return `UN WPP: ${r.retrieved} values stored (${r.projections} labelled PROJECTION), ${r.unavailable} unavailable.`;
           })}><Download className="h-4 w-4" /> Fetch UN World Population Prospects</button>
           <button className="btn" disabled={busy} onClick={() => void run(async () => {
+            const r = await api.syncLifeTables({ countries: iso3, yearStart: years.start, yearEnd: years.end });
+            return `UN WPP life tables: ${r.lifeObservations} age-specific death probabilities stored (${r.projections} labelled PROJECTION), ${r.unavailable} unavailable. Create a new snapshot to use them.`;
+          })}><Download className="h-4 w-4" /> Fetch UN age-specific life tables</button>
+          <button className="btn" disabled={busy} onClick={() => void run(async () => {
             const iso2 = iso3.map((c) => ({ IND: "IN", ARE: "AE" } as Record<string, string>)[c] ?? c);
             const r = await lifespanApi.truth.syncWorldBank({ indicators: WB_CONTEXT, countries: iso2, yearStart: Math.max(1960, years.start), yearEnd: Math.min(2024, years.end) });
             return `World Bank context indicators: ${r.retrieved} values, ${r.unavailable} unavailable (left missing).`;
           })}><Download className="h-4 w-4" /> Fetch World Bank context indicators</button>
         </div>
-        <p className="text-[11px] text-muted-foreground">UN WPP uses the official free bulk CSV (downloaded once, then works offline). The WPP Data Portal API needs a registered token, so it is not used. Years after 2023 are UN projections.</p>
+        <p className="text-[11px] text-muted-foreground">UN WPP uses the official free bulk CSV (downloaded once, then works offline). The WPP Data Portal API needs a registered token, so it is not used. Years after 2023 are UN projections. Life tables (two official files, ~145 MB each) give death probabilities by 5-year age group and sex; the simulation prefers them over broad measures.</p>
       </section>
 
       <section className="panel mb-6">

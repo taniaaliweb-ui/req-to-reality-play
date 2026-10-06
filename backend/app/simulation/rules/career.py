@@ -36,7 +36,7 @@ def _first_job(ctx, st, forced_lock=None):
     else:
         z = r.gauss(0, 1)
         sd = sp["sd"] * ctx.ctl("randomness")
-        factor = math.exp(z * sd - sd * sd / 2)
+        factor = math.exp(z * sd - sd * sd / 2)  # rule:R-LOGNORMAL-MEAN
         how = f"log-normal individual factor (z={z:.3f}, sd={sd:.3f}, prior P-WAGE-SPREAD)"
     emp.update(state="employee", occupation=occ, wageFactor=round(factor, 6), firstJobYear=st["year"], seniority=0, unemployedYears=0)
     expl = (f"First job as {occ} worker in {st['country']}. Reference wage {ref['currency']} {ref['annual']:.0f}/yr [{ref['class']}] — {ref['method']} "
@@ -48,6 +48,10 @@ def _first_job(ctx, st, forced_lock=None):
         ctx.events[-1]["evidenceIds"] += ref["evidenceIds"]
         ctx.events[-1]["assumptionIds"] += ref["assumptionIds"]
         ctx.events[-1]["priorIds"] += ref["priorIds"] + [ctx.pid("P-WAGE-SPREAD")]
+    ctx.events[-1]["lineage"] = {"kind": "WAGE_DERIVATION", "anchorCoverage": ref.get("anchorCoverage"),
+                                 "chain": list(ref.get("chain") or []) + [{"step": "individual_position", "label": how, "factor": str(round(factor, 6)),
+                                                                           "classification": "SIMULATED", "sourceIds": [ctx.pid("P-WAGE-SPREAD")]}],
+                                 "referenceWage": str(round(ref["annual"], 2)), "currency": ref["currency"], "referenceClass": ref["class"]}
 
 
 def step(ctx, st) -> None:
@@ -58,7 +62,7 @@ def step(ctx, st) -> None:
             emp["state"] = "unemployed"
         else:
             lk = ctx.lock("first_job", y)
-            if lk and a >= 12:
+            if lk and a >= ctx.age_bound("lockedFirstJobMinAge"):
                 st["edu"].update(state="completed")
                 emp["state"] = "unemployed"
             else:
@@ -83,7 +87,7 @@ def step(ctx, st) -> None:
                 _first_job(ctx, st, lk)
                 return
             pr = Prob(ctx.P("P-CAREER-FIRST-JOB")["p"], "PROVISIONAL_SYSTEM_PRIOR", "annual first-job finding", prior_ids=[ctx.pid("P-CAREER-FIRST-JOB")])
-            pr.add("aptitude", 0.05 * ctx.trait("aptitude")).add("social skills", 0.05 * ctx.trait("socialSkills"))
+            ctx.tadd(pr, "firstJob")
             if shock.get("jobLoss"):
                 pr.mult("verified historical shock (labour market)", 1 / shock["jobLoss"], "evidence")
             if ctx.decide(st, "career", "first_job", pr, rule="career.first_job", what="Finds a first job", importance=3,
@@ -91,12 +95,12 @@ def step(ctx, st) -> None:
                 _first_job(ctx, st)
             return
         pr = Prob(ctx.P("P-CAREER-REEMPLOY")["p"], "PROVISIONAL_SYSTEM_PRIOR", "annual re-employment", prior_ids=[ctx.pid("P-CAREER-REEMPLOY")])
-        pr.add("social skills", 0.08 * ctx.trait("socialSkills")).add("resilience", 0.06 * ctx.trait("resilience"))
+        ctx.tadd(pr, "reemploy")
         if shock.get("jobLoss"):
             pr.mult("verified historical shock (labour market)", 1 / shock["jobLoss"], "evidence")
         if ctx.decide(st, "career", "return_to_work", pr, rule="career.reemploy", what="Returns to work", importance=2,
                       before={"employment": "unemployed"}, after={"employment": "employee"}):
-            emp.update(state="employee", unemployedYears=0, wageFactor=round(emp["wageFactor"] * 0.95, 6))
+            emp.update(state="employee", unemployedYears=0, wageFactor=round(emp["wageFactor"] * ctx.sm("reemployWageFactor"), 6))
             emp["occupation"] = emp.get("occupation") or occupation_for(st)
         return
     emp["experience"] = emp.get("experience", 0) + 1
@@ -105,13 +109,13 @@ def step(ctx, st) -> None:
         biz = emp["business"]
         if not biz.get("success"):
             pr = Prob(B["successAnnual"], "PROVISIONAL_SYSTEM_PRIOR", "annual business breakthrough", prior_ids=[ctx.pid("P-CAREER-BUSINESS")]).mult("upward mobility control", ctx.ctl("upwardMobility"))
-            pr.add("aptitude", 0.01 * ctx.trait("aptitude"))
+            ctx.tadd(pr, "businessSuccess")
             if ctx.decide(st, "career", "business_success", pr, rule="career.business", what="Business succeeds", importance=3):
                 biz["success"] = True
                 st["life"]["businessSuccess"] = 1
-                st["pending"].append({"type": "business_revalue", "multiplier": "2"})
+                st["pending"].append({"type": "business_revalue", "multiplier": str(ctx.sm("businessRevalueMultiplier"))})
                 return
-        pr = Prob(B["failAnnual"] * (0.4 if biz.get("success") else 1), "PROVISIONAL_SYSTEM_PRIOR", "annual business failure", prior_ids=[ctx.pid("P-CAREER-BUSINESS")])
+        pr = Prob(B["failAnnual"] * (ctx.sm("businessFailAfterSuccessFactor") if biz.get("success") else 1), "PROVISIONAL_SYSTEM_PRIOR", "annual business failure", prior_ids=[ctx.pid("P-CAREER-BUSINESS")])
         pr.mult("downward risk control", ctx.ctl("downwardRisk")).mult("adversity control", ctx.ctl("adversity"))
         if shock.get("jobLoss"):
             pr.mult("verified historical shock", shock["jobLoss"], "evidence")
@@ -122,7 +126,7 @@ def step(ctx, st) -> None:
         return
     # employee / self_employed
     pr = Prob(ctx.P("P-CAREER-JOB-LOSS")["p"], "PROVISIONAL_SYSTEM_PRIOR", "annual job loss", prior_ids=[ctx.pid("P-CAREER-JOB-LOSS")])
-    pr.add("discipline", -0.012 * ctx.trait("discipline")).mult("downward risk control", ctx.ctl("downwardRisk")).mult("career volatility control", ctx.ctl("careerVolatility"))
+    ctx.tadd(pr, "jobLoss").mult("downward risk control", ctx.ctl("downwardRisk")).mult("career volatility control", ctx.ctl("careerVolatility"))
     if shock.get("jobLoss"):
         pr.mult("verified historical shock (" + ", ".join(shock.get("eventIds", [])) + ")", shock["jobLoss"], "evidence")
     if ctx.decide(st, "career", "job_loss", pr, rule="career.job_loss", what="Loses job", importance=3,
@@ -132,7 +136,7 @@ def step(ctx, st) -> None:
     # business start
     ov = ctx.override("starts_business", y)
     ref = ctx.any_ref_wage(st["country"], y)
-    eligible = 25 <= a <= 60 and ref is not None and liquid(st, st["currency"]) >= ref["annual"] * D(str(B["minSavingsYears"]))
+    eligible = ctx.age_bound("businessMinAge") <= a <= ctx.age_bound("businessMaxAge") and ref is not None and liquid(st, st["currency"]) >= ref["annual"] * D(str(B["minSavingsYears"]))
     if ov and not st["life"]["businessAttempts"]:
         ctx.forced(st, "career", "business_start", "SCENARIO OVERRIDE: starts a business", rule="career.override", override=True,
                    before={"employment": emp["state"]}, after={"employment": "business_owner"})
@@ -142,8 +146,9 @@ def step(ctx, st) -> None:
         return
     if eligible:
         pr = Prob(B["start"], "PROVISIONAL_SYSTEM_PRIOR", "annual business start (savings sufficient)", prior_ids=[ctx.pid("P-CAREER-BUSINESS")])
-        pr.add("risk tolerance", 0.012 * ctx.trait("riskTolerance")).add("ambition", 0.008 * ctx.trait("ambition")).mult("career volatility control", ctx.ctl("careerVolatility"))
-        if ctx.decide(st, "career", "business_start", pr, rule="career.business", what="Starts a business", importance=3, record_no=a % 5 == 0,
+        ctx.tadd(pr, "businessStart").mult("career volatility control", ctx.ctl("careerVolatility"))
+        if ctx.decide(st, "career", "business_start", pr, rule="career.business", what="Starts a business", importance=3, record_no=a % 5 == 0,  # rule:R-WHY-NOT-DISPLAY
+                     
                       before={"employment": emp["state"]}, after={"employment": "business_owner"}):
             emp.update(state="business_owner", business={"startYear": y, "success": False})
             st["life"]["businessAttempts"] += 1
@@ -152,7 +157,7 @@ def step(ctx, st) -> None:
     PR = ctx.P("P-CAREER-PROMOTION")
     if emp.get("seniority", 0) < PR["maxSeniority"]:
         pr = Prob(PR["p"], "PROVISIONAL_SYSTEM_PRIOR", "annual promotion", prior_ids=[ctx.pid("P-CAREER-PROMOTION")])
-        pr.add("ambition", 0.04 * ctx.trait("ambition")).add("aptitude", 0.03 * ctx.trait("aptitude")).mult("upward mobility control", ctx.ctl("upwardMobility"))
+        ctx.tadd(pr, "promotion").mult("upward mobility control", ctx.ctl("upwardMobility"))
         if ctx.decide(st, "career", "promotion", pr, rule="career.promotion", what=f"Promotion to seniority {emp.get('seniority', 0) + 1}", importance=2,
                       before={"seniority": emp.get("seniority", 0)}, after={"seniority": emp.get("seniority", 0) + 1}):
             emp["seniority"] = emp.get("seniority", 0) + 1

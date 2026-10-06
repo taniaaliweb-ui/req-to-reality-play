@@ -30,7 +30,8 @@ class Prob:
     assumption_ids: list[str] = field(default_factory=list)
     fact_ids: list[str] = field(default_factory=list)
     modifiers: list[dict] = field(default_factory=list)
-    cap: float = 0.995
+    cap: float = 0.995  # rule:R-PROB-CAP
+    lineage: dict | None = None  # full source → transformation → result chain (mortality, wages)
 
     def add(self, label: str, value: float, source: str = "trait") -> "Prob":
         if abs(value) > 1e-9:

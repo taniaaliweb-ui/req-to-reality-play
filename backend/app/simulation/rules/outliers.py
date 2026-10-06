@@ -8,16 +8,16 @@ from app.simulation.probability import Prob
 def step(ctx, st) -> None:
     O = ctx.P("P-OUTLIER")
     a = st["age"]
-    if a < 18:
+    if a < ctx.age_bound("adulthood"):
         return
     pid = ctx.pid("P-OUTLIER")
     inten = ctx.ctl("outlierIntensity")
     working = st["emp"]["state"] in ("employee", "self_employed", "business_owner")
     opts = [
-        ("inheritance", O["inheritance"] if 30 <= a <= 65 else 0, "positive", ctx.ctl("upwardMobility"), "Receives an inheritance"),
+        ("inheritance", O["inheritance"] if ctx.age_bound("inheritanceMinAge") <= a <= ctx.age_bound("inheritanceMaxAge") else 0, "positive", ctx.ctl("upwardMobility"), "Receives an inheritance"),
         ("investment_windfall", O["windfall"], "positive", ctx.ctl("upwardMobility"), "Investment / lottery-type windfall"),
         ("career_breakthrough", O["breakthrough"] if working else 0, "positive", ctx.ctl("upwardMobility"), "Career breakthrough"),
-        ("major_asset_loss", O["assetLoss"] * (1 + (st.get("shock") or {}).get("assetLoss", 0) * 20), "negative", ctx.ctl("adversity"), "Major asset loss (theft, fraud, disaster)"),
+        ("major_asset_loss", O["assetLoss"] * (1 + (st.get("shock") or {}).get("assetLoss", 0) * ctx.er("assetLossShockScale")), "negative", ctx.ctl("adversity"), "Major asset loss (theft, fraud, disaster)"),
     ]
     for kind, base, sign, ctl, what in opts:
         if base <= 0:

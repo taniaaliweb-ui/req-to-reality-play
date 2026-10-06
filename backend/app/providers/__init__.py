@@ -7,6 +7,7 @@ from app.providers.ilostat import ILOStatProvider
 from app.providers.manual import ManualProvider
 from app.providers.official_import import IndiaMoSPIProvider, UAEStatProvider
 from app.providers.un_wpp import UNWPPProvider
+from app.providers.un_wpp_lifetable import UNWPPLifeTableProvider
 from app.providers.world_bank import WorldBankProvider
 
 
@@ -31,6 +32,12 @@ def get_un_wpp() -> UNWPPProvider:
     # LIFESPAN_WPP_FIXTURE_FILE points tests at a recorded (trimmed) copy of the official CSV.
     from app.core.config import DATA_DIR
     return UNWPPProvider(cache_dir=DATA_DIR / "cache", fixture_file=os.environ.get("LIFESPAN_WPP_FIXTURE_FILE") or None)
+
+
+def get_un_wpp_lifetable() -> UNWPPLifeTableProvider:
+    # LIFESPAN_WPP_LT_FIXTURE_DIR points tests at recorded (country-trimmed) copies of the official abridged life tables.
+    from app.core.config import DATA_DIR
+    return UNWPPLifeTableProvider(cache_dir=DATA_DIR / "cache", fixture_dir=os.environ.get("LIFESPAN_WPP_LT_FIXTURE_DIR") or None)
 
 
 manual_provider = ManualProvider()

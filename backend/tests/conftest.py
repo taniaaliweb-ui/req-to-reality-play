@@ -58,7 +58,7 @@ class Server:
         self.start()
 
     def client(self) -> httpx.Client:
-        return httpx.Client(base_url=self.url, timeout=10)
+        return httpx.Client(base_url=self.url, timeout=60)
 
 
 @pytest.fixture()

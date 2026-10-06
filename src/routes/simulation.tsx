@@ -8,7 +8,7 @@ import { CONTROL_LABELS } from "@/lib/defaults";
 import { cn } from "@/lib/utils";
 import { pageHead } from "@/lib/seo";
 import { lifespanApi } from "@/services/lifespanApi";
-import type { SimEvent, SimJob, SimPrior, SimRun, SimState } from "@/types/simulation";
+import type { Lineage, SimEvent, SimJob, SimPrior, SimRun, SimState, WageStep } from "@/types/simulation";
 
 export const Route = createFileRoute("/simulation")({
   head: pageHead("Simulation", "Run reproducible simulated lives from frozen evidence, assumptions and visible provisional priors."),
@@ -177,6 +177,7 @@ function RunView({ id, onChanged }: { id: string; onChanged: () => void }) {
                 {why.factIds.length > 0 && <div>Locked/fact refs: <span className="data">{why.factIds.join(", ")}</span></div>}
                 <div>Rule {why.ruleId}</div>
               </div>
+              {why.lineage && <LineageView l={why.lineage} />}
             </>
           ) : <div className="text-muted-foreground">Select an event to see its full probability trace: base → modifiers → final probability → random draw → outcome.</div>}
         </div>
@@ -189,8 +190,46 @@ function RunView({ id, onChanged }: { id: string; onChanged: () => void }) {
 
 const K = ({ label, v }: { label: string; v: React.ReactNode }) => <div><div className="field-label">{label}</div><div className="data text-sm">{v}</div></div>;
 
-function Ledger({ states }: { states: SimState[] }) {
+function WageChain({ chain, coverage }: { chain: WageStep[]; coverage?: string | undefined }) {
   return (
+    <table className="w-full text-[11px]">
+      <thead className="text-left text-muted-foreground"><tr><th className="p-1">Step</th><th>Detail</th><th className="text-right">Value / factor</th><th>Classification</th></tr></thead>
+      <tbody>
+        {chain.map((c, i) => (
+          <tr key={i} className="border-t border-border align-top">
+            <td className="p-1 data">{c.step}</td><td>{c.label}{c.coverage ? ` · coverage ${c.coverage}` : ""}</td>
+            <td className="data text-right">{c.value ? `${c.currency ?? ""} ${Number(c.value).toLocaleString()}` : c.factor ? `× ${Number(c.factor).toFixed(4)}` : ""}</td>
+            <td><span className={cn("chip text-[9px]", c.classification === "SIMULATED" ? "text-sim" : c.classification === "EMPIRICAL" || c.classification === "DERIVED_FROM_EMPIRICAL" ? "text-pass" : "text-mock")}>{c.classification}</span></td>
+          </tr>
+        ))}
+        {coverage && <tr><td colSpan={4} className="p-1 text-muted-foreground">Starting anchor coverage: {coverage}. The final wage is SIMULATED; it is evidence-derived only if every step above is EMPIRICAL/DERIVED.</td></tr>}
+      </tbody>
+    </table>
+  );
+}
+
+function LineageView({ l }: { l: Lineage }) {
+  if (l.kind === "WAGE_DERIVATION" && l.chain) return <div className="mt-3 border-t border-border pt-2"><div className="field-label mb-1">Wage derivation</div><WageChain chain={l.chain} coverage={l.anchorCoverage} /></div>;
+  return (
+    <div className="mt-3 border-t border-border pt-2 text-[11px]">
+      <div className="field-label mb-1">Mortality lineage · {l.method}</div>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+        <span>Country / year</span><span className="data">{l.country} {l.year} (source year {l.sourceYear ?? "—"}{l.projection ? ", projection" : ""})</span>
+        <span>Sex / age</span><span className="data">{l.sex} · {l.age} · group {l.ageGroup}</span>
+        <span>Source</span><span className="data">{l.sourceIndicator} = {l.sourceValue ?? "—"}</span>
+        <span>Formula</span><span className="data">{l.formula} ({l.formulaId} v{l.formulaVersion})</span>
+        <span>Annual probability</span><span className="data">{l.annualProbability?.toFixed(6)}{l.finalAnnualProbability !== undefined ? ` → after modifiers ${l.finalAnnualProbability.toFixed(6)}` : ""}</span>
+        <span>Observations</span><span className="data truncate">{(l.observationIds ?? []).join(", ")}</span>
+      </div>
+      {l.ageSpecificAvailable === false && <div className="mt-1 text-warn">No age-specific life table in the snapshot for this year — broad fallback used. Sync UN life tables in Life Context Data and re-snapshot.</div>}
+    </div>
+  );
+}
+
+function Ledger({ states }: { states: SimState[] }) {
+  const [open, setOpen] = useState<number | null>(null);
+  const sel = states.find((s) => s.year === open);
+  return (<>
     <div className="panel max-h-[50vh] overflow-auto">
       <div className="panel-header text-sm">Year-by-year economics <SimulatedLabel /></div>
       <table className="w-full text-xs">
@@ -204,7 +243,7 @@ function Ledger({ states }: { states: SimState[] }) {
                 <td className="data text-right">{s.currency} {Math.round(Number(s.economics.totalIncome)).toLocaleString()}</td>
                 <td className="data text-right">{Math.round(Number(s.economics.totalExpenses)).toLocaleString()}</td>
                 <td className="data text-right">{Math.round(Number(s.netWorth)).toLocaleString()}</td>
-                <td>{s.economics.wageProvenance ? <ProbClassChip c={s.economics.wageProvenance.class} /> : ""}</td>
+                <td>{s.economics.wageProvenance ? <button title="Show wage derivation" onClick={() => setOpen(open === s.year ? null : s.year)}><ProbClassChip c={s.economics.wageProvenance.class} /></button> : ""}</td>
                 <td className={cn("data", r && Number(r.difference) !== 0 ? "text-fail" : "text-pass")}>{r ? (Number(r.difference) === 0 ? "✓" : r.difference) : ""}</td>
               </tr>
             );
@@ -212,7 +251,8 @@ function Ledger({ states }: { states: SimState[] }) {
         </tbody>
       </table>
     </div>
-  );
+    {sel?.economics.wageProvenance?.chain && <div className="panel mt-2 p-3"><div className="mb-1 text-sm font-medium">Wage derivation {sel.year}</div><WageChain chain={sel.economics.wageProvenance.chain} coverage={sel.economics.wageProvenance.anchorCoverage} /></div>}
+  </>);
 }
 
 function Quality({ run }: { run: SimRun }) {
@@ -342,8 +382,10 @@ function Priors() {
       {(data?.priors ?? []).map((p) => (
         <div key={p.id} className={cn("panel p-3 text-xs", !p.enabled && "opacity-60")}>
           <div className="flex flex-wrap items-center gap-2"><span className="data font-medium">{p.id}</span><span className="chip">{p.domain}</span><span className="font-medium">{p.name}</span>
+            {p.classification && <span className={cn("chip text-[10px]", p.classification === "PROVISIONAL_MODEL_PRIOR" ? "text-mock" : p.classification === "DETERMINISTIC_ACCOUNTING_RULE" ? "text-muted-foreground" : "text-pass")}>{p.classification}</span>}
             <label className="ml-auto flex items-center gap-1"><input type="checkbox" checked={p.enabled} onChange={(e) => void save(p, { enabled: e.target.checked })} /> enabled for simulation</label></div>
           <div className="mt-1 text-muted-foreground">{p.description} {p.notes}</div>
+          <div className="mt-1 text-[11px] text-muted-foreground">Provenance: {p.provenance ?? "—"}{p.units && Object.keys(p.units).length > 0 && <> · Units: <span className="data">{Object.entries(p.units).map(([k, u]) => `${k}: ${u}`).join("; ")}</span></>} · version {p.version}</div>
           <textarea className="input data mt-2 h-20 w-full text-[11px]" value={edit[p.key] ?? JSON.stringify(p.parameter)} onChange={(e) => setEdit({ ...edit, [p.key]: e.target.value })} />
           {edit[p.key] !== undefined && <button className="btn-ghost mt-1" onClick={() => { try { void save(p, { parameter: JSON.parse(edit[p.key]!) }); setEdit({ ...edit, [p.key]: undefined as unknown as string }); } catch { setMsg("Parameter must be valid JSON."); } }}>Save new version</button>}
         </div>

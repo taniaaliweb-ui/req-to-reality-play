@@ -5,6 +5,15 @@ export type Money = Record<string, string>;
 export interface SimPrior {
   id: string; key: string; version: number; domain: string; name: string; description: string;
   parameter: Record<string, unknown>; enabled: boolean; active: boolean; notes: string; label: string; updatedAt: string;
+  classification?: PriorClassification; units?: Record<string, string>; provenance?: string;
+}
+export type PriorClassification = "EMPIRICAL" | "DERIVED" | "USER_ASSUMPTION" | "PROVISIONAL_MODEL_PRIOR" | "DETERMINISTIC_ACCOUNTING_RULE";
+export interface WageStep { step: string; label: string; value?: string; factor?: string; currency?: string; coverage?: string; classification: string; componentClass?: string; sourceIds?: string[] }
+export interface Lineage {
+  method?: string; kind?: string; country?: string; year?: number; sourceYear?: number; sex?: string; age?: number; ageGroup?: string; ageGroupSpan?: number | null;
+  sourceIndicator?: string; sourceValue?: string | null; observationIds?: string[]; formula?: string; formulaId?: string; formulaVersion?: string;
+  annualProbability?: number; finalAnnualProbability?: number; projection?: boolean; ageSpecificAvailable?: boolean;
+  chain?: WageStep[]; anchorCoverage?: string; referenceWage?: string; currency?: string; referenceClass?: string;
 }
 export interface ReviewDimension {
   key: string; label: string; critical: boolean; evidenceStatus: string; simulationStatus: string; evidenceCount: number;
@@ -33,12 +42,12 @@ export interface SimEvent {
   id: string; seq: number; year: number; age: number; domain: string; eventType: string; probability: number | null; baseProbability: number | null;
   probabilityClass: ProbClass; evidenceIds: string[]; assumptionIds: string[]; priorIds: string[]; factIds: string[];
   modifiers: { label: string; kind: "add" | "mult"; value: number; source: string }[]; randomDraw: number | null; outcome: string; occurred: boolean;
-  importance: number; explanation: string; scenarioOverride: boolean; ruleId: string;
+  importance: number; explanation: string; scenarioOverride: boolean; ruleId: string; lineage?: Lineage | null;
 }
 export interface SimState {
   year: number; age: number; country: string; employment: string; currency: string; income: string; netWorth: string;
   economics: { totalIncome: string; totalExpenses: string; netWorth: Money; reconciliation: Record<string, { difference: string }>; householdSize: number; shortfall: string[];
-    wageProvenance: { class: string; method: string; anchorId: string } | null; income: Record<string, string>; expenses: Record<string, string>; dependent?: boolean };
+    wageProvenance: { class: string; method: string; anchorId: string; anchorCoverage?: string; chain?: WageStep[] } | null; income: Record<string, string>; expenses: Record<string, string>; dependent?: boolean };
 }
 export interface Stat { n: number; min: number; p10: number; median: number; p90: number; max: number; mean: number }
 export interface SimJob {
@@ -61,7 +70,30 @@ export interface ProductionResult {
   check: { wordCount: number; estimatedRuntimeSeconds: number; warnings: { ruleId: string; message: string }[]; chapters: string[] };
 }
 export type Receipt2 = Record<string, unknown> & { provenance: Record<string, unknown>; label: string };
-export interface Candidate { id: string; claim: string; value: string; unit: string; source: string; status: string; submittedBy: string; createdAt: string }
+export interface Candidate {
+  id: string; claim: string; value: string; unit: string; source: string; url?: string; location?: string; periodStart?: number | null; periodEnd?: number | null;
+  status: string; submittedBy: string; createdAt: string; acceptedAs?: string | null; reviewedScope?: Record<string, unknown> | null; links?: Record<string, string>;
+}
+export interface ReviewForm {
+  acceptAs: "FACT" | "ESTIMATE" | "CONTEXT" | "ASSUMPTION" | "REJECT"; country?: string; region?: string; yearStart?: number | undefined; yearEnd?: number | undefined; population?: string;
+  value?: string | undefined; unit?: string | undefined; domain?: string; metric?: string; sex?: string; lifeStage?: string | undefined; sourceTitle?: string; sourceOrganization?: string;
+  sourceType?: string; reliability?: string; url?: string; confidence?: string; note?: string;
+}
+export interface Replacement { id: string; episodeId: string; candidateId: string; targetKind: "ASSUMPTION" | "PRIOR"; targetId: string; message: string; status: string; newSnapshotId: string | null; newRunId: string | null; createdAt: string }
+export interface McpTool { name: string; description: string; riskClass: "READ" | "SAFE_WRITE" | "CONSEQUENTIAL_WRITE" | "PROHIBITED"; group: string; enabled: boolean }
+export interface McpPermissions { config: { profile: string; enabledGroups: string[]; consequential: "REQUIRE_APPROVAL" | "ALLOW" | "DENY" }; tools: McpTool[]; groups: string[]; riskClasses: string[]; profiles: Record<string, string[]> }
+export interface McpApproval { id: string; tool: string; arguments: Record<string, unknown>; status: string; result: Record<string, unknown> | null; createdAt: string; decidedAt: string | null; riskClass: string }
+export interface ModelValidation {
+  simulationEngineVersion: string; economicEngineVersion: string; priorRegistryVersion: string; classifications: string[]; activePriors: SimPrior[];
+  priorsByClassification: Record<string, string[]>; empiricalInputs: { input: string; usedBy: string; source: string; transformation: string }[];
+  empiricalParameters: SimPrior[]; assumptionParameters: { id: string; domain: string; claim: string; value: string; unit: string; years: (number | null)[]; classification: string }[];
+  deterministicRules: { id: string; description: string; parameter?: Record<string, unknown>; occurrences: { file: string; line: number; value: string }[] }[];
+  methodology: Record<string, string[]>; knownLimitations: string[];
+  constantScan: { status: "PASS" | "FAIL"; unregistered: { file: string; line: number; value: string; code: string }[]; taggedCount: number; filesScanned: string[] };
+  episode: null | { id: string; canonical: null | { runId: string; mortalityMethodYears: Record<string, number> };
+    snapshotInputs: null | { snapshot: { id: string; label: string; contentHash: string | null }; lifeTable: Record<string, { years: number; first: number; last: number }>; series: Record<string, Record<string, number>>; cpiCountries: string[]; fxCountries: string[]; wageAnchors: number } };
+  note: string;
+}
 export interface DashboardData {
   snapshot: { id: string; label: string } | null;
   simulationRuns: { total: number; batch: number; branches: number };

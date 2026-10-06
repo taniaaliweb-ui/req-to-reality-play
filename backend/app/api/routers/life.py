@@ -93,6 +93,42 @@ def sync_wpp(db: DB, req: WppSync):
     return {"provider": "un-wpp", "status": status, "startedAt": started, "finishedAt": repo.now_iso(), **summary}
 
 
+class WppLtSync(BaseModel):
+    countries: list[Country3] = Field(min_length=1, max_length=20)
+    yearStart: Year
+    yearEnd: Year
+    sexes: list[str] = ["MALE", "FEMALE", "BOTH"]
+
+
+@router.post("/data/un-wpp/life-table/sync")
+def sync_wpp_lifetable(db: DB, req: WppLtSync):
+    """Age-specific mortality (abridged life tables nqx / open-group mx). Preferred by the mortality model over broad measures."""
+    st = repo.get_settings(db)
+    if not (st["externalDataEnabled"] and st.get("unWppEnabled", True)):
+        raise HTTPException(403, "UN WPP access is disabled in Settings.")
+    if req.yearEnd < req.yearStart or any(x not in ("MALE", "FEMALE", "BOTH") for x in req.sexes):
+        raise HTTPException(422, "yearEnd must be >= yearStart; sexes ⊂ MALE/FEMALE/BOTH")
+    p = providers.get_un_wpp_lifetable()
+    started = repo.now_iso()
+    try:
+        res = p.fetch(req.countries, req.yearStart, req.yearEnd, req.sexes)
+    except ProviderError as e:
+        db.add(m.ProviderSync(id="SYNC-" + uuid.uuid4().hex[:10], provider="un-wpp-lt", started_at=started, finished_at=repo.now_iso(), status="error",
+                              request=req.model_dump(), summary={"error": f"{e.kind}: {e}", "retrieved": 0}))
+        db.commit()
+        raise HTTPException(502, f"UN WPP life tables: {e}") from e
+    counts = truth.store_observations(db, res.observations)
+    db.flush()
+    n = life.normalize_un_wpp(db, res.observations)
+    status = "partial" if res.missing or res.countries_unknown else "ok"
+    summary = {"retrieved": len(res.observations), "projections": sum(1 for o in res.observations if o.raw.get("projection")), "lifeObservations": n,
+               "unavailable": len(res.missing), "missing": res.missing[:200], "unknownCountries": res.countries_unknown, **counts}
+    db.add(m.ProviderSync(id="SYNC-" + uuid.uuid4().hex[:10], provider="un-wpp-lt", started_at=started, finished_at=repo.now_iso(), status=status,
+                          request=req.model_dump(), summary=summary))
+    db.commit()
+    return {"provider": "un-wpp-lt", "status": status, "startedAt": started, "finishedAt": repo.now_iso(), **summary}
+
+
 # ------------------------------------------------------------ observations
 @router.get("/life/observations")
 def list_obs(db: DB, domain: str | None = None, country: str | None = None, metric: str | None = None, yearStart: int | None = None,

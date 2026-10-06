@@ -76,8 +76,19 @@ def _collect_records(db: Session, episode_id: str) -> tuple[list[tuple], set[str
                 lo_ids.add(lid)
                 if eid:
                     ext.add(eid)
-    for lid in sorted(lo_ids):
-        R.append(("life-observation", lid, life.life_obs_out(db.get(m.LifeObservation, lid))))
+    # Mortality is evaluated in EVERY simulated year, so the whole potential life span is frozen (age-specific life tables + broad measures)
+    q = select(m.LifeObservation.id, m.LifeObservation.external_observation_id).where(
+        m.LifeObservation.domain == "mortality", m.LifeObservation.country.in_(countries), m.LifeObservation.is_prototype.is_(False),
+        m.LifeObservation.year >= plan["birthYear"] - 2, m.LifeObservation.year <= plan["birthYear"] + 112)
+    for lid, eid in db.execute(q):
+        lo_ids.add(lid)
+        if eid:
+            ext.add(eid)
+    lo_sorted = sorted(lo_ids)
+    for i in range(0, len(lo_sorted), 900):  # batched loads (life tables add thousands of rows)
+        rows = {r.id: r for r in db.scalars(select(m.LifeObservation).where(m.LifeObservation.id.in_(lo_sorted[i:i + 900])))}
+        for lid in lo_sorted[i:i + 900]:
+            R.append(("life-observation", lid, life.life_obs_out(rows[lid])))
     for b in db.scalars(select(m.LifeStageBaseline).where(m.LifeStageBaseline.episode_id == episode_id)):
         R.append(("life-baseline", b.id, life.life_baseline_out(b)))
         ext |= {e["externalObservationId"] for e in b.evidence or [] if e.get("externalObservationId")}
@@ -103,10 +114,13 @@ def _write_contents(db: Session, sid: str, episode_id: str):
     F, O, B, excluded = _collect(db, episode_id)
     R, ext = _collect_records(db, episode_id)
     have = {x[0] for x in O}
-    for oid in sorted(ext - have):
-        o = db.get(m.ExternalObservation, oid)
-        if o is not None:
-            O.append((o.id, o.value, o.retrieved_at, {k: v for k, v in obs_out(o).items() if k != "rawMetadata"}))
+    todo = sorted(ext - have)
+    for i in range(0, len(todo), 900):
+        rows = {o.id: o for o in db.scalars(select(m.ExternalObservation).where(m.ExternalObservation.id.in_(todo[i:i + 900])))}
+        for oid in todo[i:i + 900]:
+            o = rows.get(oid)
+            if o is not None:
+                O.append((o.id, o.value, o.retrieved_at, {k: v for k, v in obs_out(o).items() if k != "rawMetadata"}))
     for t in (m.SnapshotFact, m.SnapshotObservation, m.SnapshotBaseline, m.SnapshotRecord):
         for r in db.scalars(select(t).where(t.snapshot_id == sid)):
             db.delete(r)

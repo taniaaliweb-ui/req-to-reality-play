@@ -20,7 +20,7 @@ def step(ctx, st) -> None:
     mother_age = st["age"] if ctx.ch["sex"] == "FEMALE" else (partner["age"] if partner and partner.get("sex") == "FEMALE" else None)
     if mother_age is None or not (F["minAge"] <= mother_age <= F["maxAge"]):
         return
-    o = ctx.series("TFR", st["country"], y, 2, "FEMALE", "") or ctx.series("TFR", st["country"], y, 2)
+    o = ctx.series("TFR", st["country"], y, ctx.window("fertility"), "FEMALE", "") or ctx.series("TFR", st["country"], y, ctx.window("fertility"))
     if o:
         pr = Prob(o["value"] / F["fertileYears"], "DERIVED_FROM_EMPIRICAL", f"UN WPP TFR {o['value']:.2f} ({st['country']} {o['year']}) / {F['fertileYears']} fertile years",
                   evidence_ids=[o["id"]], prior_ids=[ctx.pid("P-FERT-SHAPE")])
@@ -32,10 +32,10 @@ def step(ctx, st) -> None:
     if not partner:
         pr.mult("not in a partnership", F["unpartneredFactor"], "prior")
     if rel["state"] == "partnered":
-        pr.mult("partnered but not married", 0.6, "prior")
+        ctx.smod(pr, "partnered but not married", "cohabitingFertilityMultiplier")
     if st["flags"].get("distress"):
-        pr.mult("household financial distress", 0.7, "state")
-    pr.add("family attachment", 0.01 * ctx.trait("familyAttachment"))
+        ctx.smod(pr, "household financial distress", "distressFertilityMultiplier")
+    ctx.tadd(pr, "birth")
     if ctx.decide(st, "fertility", "child_born", pr, rule="fertility.annual", what=f"Child born (child #{n + 1})", importance=3,
                   before={"children": n}, after={"children": n + 1}):
         st["children"].append(y)

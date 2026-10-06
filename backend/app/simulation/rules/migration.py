@@ -63,17 +63,17 @@ def step(ctx, st) -> None:
     shock = st.get("shock") or {}
     if mig["abroad"]:
         pr = Prob(M["returnAnnual"], "PROVISIONAL_SYSTEM_PRIOR", "annual return migration", prior_ids=[ctx.pid("P-MIG-OPPORTUNITY")])
-        pr.add("family attachment", 0.03 * ctx.trait("familyAttachment"))
+        ctx.tadd(pr, "returnMigration")
         if st["emp"]["state"] == "unemployed":
-            pr.add("unemployed abroad", 0.1, "state")
+            ctx.smod(pr, "unemployed abroad", "returnUnemployedAbroadAdd", "add")
         if ctx.decide(st, "migration", "return_migration", pr, rule="migration.return", what=f"Returns to {mig['origin']}", importance=3,
                       before={"country": st["country"]}):
             _move(ctx, st, mig["origin"], ctx.ch.get("region") or "", ctx.events[-1])
             mig["returned"] = True
         return
-    if mig["count"] >= 2:
+    if mig["count"] >= ctx.sm("maxMigrations"):
         return
-    paths = [p for p in ctx.ev["migrationPaths"] if p["origin"] == st["country"] and p["yearStart"] - 5 <= y <= p["yearEnd"] + 5]
+    paths = [p for p in ctx.ev["migrationPaths"] if p["origin"] == st["country"] and p["yearStart"] - ctx.window("migrationPathYears") <= y <= p["yearEnd"] + ctx.window("migrationPathYears")]
     if not paths:
         return
     if ctx.override("no_migration"):
@@ -84,15 +84,16 @@ def step(ctx, st) -> None:
     p = paths[0]
     pr = Prob(M["withPath"], "PROVISIONAL_SYSTEM_PRIOR", f"annual migration opportunity on evidenced path {p['origin']}→{p['destination']}",
               prior_ids=[ctx.pid("P-MIG-OPPORTUNITY")], evidence_ids=[p["id"]])
-    pr.add("migration willingness", 0.025 * ctx.trait("migrationWillingness")).add("family attachment", -0.015 * ctx.trait("familyAttachment"))
+    ctx.tadd(pr, "migration")
     if st["emp"]["state"] == "unemployed":
-        pr.add("unemployed", 0.02, "state")
+        ctx.smod(pr, "unemployed", "migrateUnemployedAdd", "add")
     o_ref, d_ref = ctx.any_ref_wage(st["country"], y), ctx.any_ref_wage(p["destination"], y)
     fo, fd = ctx.fx(st["country"], y), ctx.fx(p["destination"], y)
     if o_ref and d_ref and fo and fd:
         ratio = (d_ref["annual"] / fd[0]) / (o_ref["annual"] / fo[0])
-        if ratio > Decimal("1.5"):
-            pr.add(f"wage opportunity (destination/origin reference wage in USD ≈ {ratio:.1f}×)", min(0.03, 0.006 * float(ratio)), "evidence")
+        if ratio > Decimal(str(ctx.sm("wageOpportunityMinRatio"))):
+            pr.add(f"wage opportunity (destination/origin reference wage in USD ≈ {ratio:.1f}×)", min(ctx.sm("wageOpportunityCap"), ctx.sm("wageOpportunityPerRatio") * float(ratio)), "evidence")
+            pr.prior_ids.append(ctx.pid("P-STATE-MODIFIERS"))
             pr.evidence_ids += [fo[1], fd[1]] + d_ref["evidenceIds"]
     if shock.get("migration"):
         pr.mult("verified historical shock", shock["migration"], "evidence")
@@ -102,7 +103,7 @@ def step(ctx, st) -> None:
     fp = Prob(M["failure"], "PROVISIONAL_SYSTEM_PRIOR", "migration attempt fails (visa/job falls through)", prior_ids=[ctx.pid("P-MIG-OPPORTUNITY")]).mult("adversity control", ctx.ctl("adversity"))
     if ctx.decide(st, "migration", "failed_migration", fp, rule="migration.failure", what="Migration attempt fails", importance=3):
         mig["failed"] += 1
-        st["pending"].append({"type": "migration_cost", "years": "0.25"})
+        st["pending"].append({"type": "migration_cost", "years": str(ctx.sm("migrationFailureCostYears"))})
         return
     mig["count"] += 1
     e = ctx.record(st, "migration", "migration", f"Migrates to {p['destination']} (successful attempt after opportunity draw).", rule="migration.success",
