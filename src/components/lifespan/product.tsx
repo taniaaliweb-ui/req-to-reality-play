@@ -1,5 +1,6 @@
 // Canonical-life product panels (story engine, production workspace, Life Receipt 2.0, exports, MCP status, candidate evidence).
-import { Download, FileUp, RefreshCw, Save } from "lucide-react";
+import { Download, FileUp, Redo2, RefreshCw, Save, Undo2 } from "lucide-react";
+import { useTextHistory } from "@/features/production/history";
 import { useEffect, useState } from "react";
 import { useLifespan } from "@/hooks/useLifespan";
 import { BackendOnly, ErrorLine, money, useBackend } from "@/components/lifespan/sim";
@@ -43,9 +44,10 @@ export function CanonicalStory({ eid }: { eid: string }) {
 
 export function ProductionWorkspace({ eid }: { eid: string }) {
   const { data, error, refresh, setData } = useBackend(() => sim.production(eid), [eid]);
-  const [script, setScript] = useState("");
+  const hist = useTextHistory(eid, data?.script);
+  const script = hist.value;
+  const setScript = hist.set;
   const [msg, setMsg] = useState<string | null>(null);
-  useEffect(() => { if (data) setScript(data.script); }, [data]);
   const words = script.split(/\s+/).filter(Boolean).length;
   return (
     <BackendOnly>
@@ -57,9 +59,12 @@ export function ProductionWorkspace({ eid }: { eid: string }) {
             <div className="panel">
               <div className="panel-header text-sm"><span>Script editor · {words} words · ~{Math.round((words / 150) * 60 / 60)} min narration {data.edited && "· edited"}</span>
                 <div className="flex gap-2"><button className="btn-ghost" onClick={() => void sim.production(eid, true).then((p) => { setData(p); setMsg("Regenerated from the canonical life (manual edits replaced)."); })}><RefreshCw className="h-4 w-4" /> Regenerate</button>
+                  <button className="btn-ghost" disabled={!hist.canUndo} title="Undo (Ctrl/Cmd+Z)" onClick={hist.undo}><Undo2 className="h-4 w-4" /> Undo</button>
+                  <button className="btn-ghost" disabled={!hist.canRedo} title="Redo (Ctrl/Cmd+Shift+Z)" onClick={hist.redo}><Redo2 className="h-4 w-4" /> Redo</button>
                   <button className="btn-primary" onClick={() => void sim.saveScript(eid, script).then((p) => { setData(p); setMsg("Saved."); }).catch((e: Error) => setMsg(e.message))}><Save className="h-4 w-4" /> Save</button></div></div>
               <div className="flex gap-1 overflow-x-auto border-b border-border p-2 text-xs">{data.check.chapters.map((c) => <button key={c} className="chip" onClick={() => { const i = script.indexOf(`## ${c}`); const ta = document.getElementById("script-ta") as HTMLTextAreaElement | null; if (ta && i >= 0) { ta.focus(); ta.setSelectionRange(i, i); } }}>{c}</button>)}</div>
-              <textarea id="script-ta" className="h-[480px] w-full resize-y bg-card p-3 font-mono text-xs leading-5 outline-none" value={script} onChange={(e) => setScript(e.target.value)} />
+              <textarea id="script-ta" className="h-[480px] w-full resize-y bg-card p-3 font-mono text-xs leading-5 outline-none" value={script} onChange={(e) => setScript(e.target.value)}
+                onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); if (e.shiftKey) hist.redo(); else hist.undo(); } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "y") { e.preventDefault(); hist.redo(); } }} />
               <div className="border-t border-border p-2 text-xs">{msg && <div className="text-pass">{msg}</div>}{data.check.warnings.length === 0 ? <span className="text-pass">No fact warnings.</span> : data.check.warnings.map((w, i) => <div key={i} className="text-warn">⚠ {w.ruleId}: {w.message}</div>)}</div>
             </div>
             <div className="panel max-h-[620px] overflow-auto">
