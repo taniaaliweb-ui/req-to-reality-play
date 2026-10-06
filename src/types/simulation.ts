@@ -75,8 +75,8 @@ export interface Candidate {
   status: string; submittedBy: string; createdAt: string; acceptedAs?: string | null; reviewedScope?: Record<string, unknown> | null; links?: Record<string, string>;
 }
 export interface ReviewForm {
-  acceptAs: "FACT" | "ESTIMATE" | "CONTEXT" | "ASSUMPTION" | "REJECT"; country?: string; region?: string; yearStart?: number; yearEnd?: number; population?: string;
-  value?: string; unit?: string; domain?: string; metric?: string; sex?: string; lifeStage?: string; sourceTitle?: string; sourceOrganization?: string;
+  acceptAs: "FACT" | "ESTIMATE" | "CONTEXT" | "ASSUMPTION" | "REJECT"; country?: string; region?: string; yearStart?: number | undefined; yearEnd?: number | undefined; population?: string;
+  value?: string | undefined; unit?: string | undefined; domain?: string; metric?: string; sex?: string; lifeStage?: string | undefined; sourceTitle?: string; sourceOrganization?: string;
   sourceType?: string; reliability?: string; url?: string; confidence?: string; note?: string;
 }
 export interface Replacement { id: string; episodeId: string; candidateId: string; targetKind: "ASSUMPTION" | "PRIOR"; targetId: string; message: string; status: string; newSnapshotId: string | null; newRunId: string | null; createdAt: string }
