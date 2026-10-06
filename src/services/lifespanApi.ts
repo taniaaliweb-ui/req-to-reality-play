@@ -93,7 +93,6 @@ export interface SimApi {
 export interface LifeApi {
   syncUnWpp(req: { countries: string[]; yearStart: number; yearEnd: number; indicators?: string[] }): Promise<SyncReport & { projections: number; lifeObservations: number }>;
   syncLifeTables(req: { countries: string[]; yearStart: number; yearEnd: number; sexes?: string[] }): Promise<SyncReport & { projections: number; lifeObservations: number }>;
-  syncLifeTables(req: { countries: string[]; yearStart: number; yearEnd: number; sexes?: string[] }): Promise<SyncReport & { projections: number; lifeObservations: number }>;
   observations(filter?: Record<string, string | number | undefined>): Promise<LifeObservation[]>;
   summary(): Promise<LifeObsSummary[]>;
   importPreview(provider: ImportProvider, csv: string): Promise<LifeImportPreview>;
@@ -287,8 +286,6 @@ export class HttpLifespanApi implements LifespanApi {
     this.life = {
       syncUnWpp: (req) => this.req("POST", "/data/un-wpp/sync", req),
       syncLifeTables: (req) => this.req("POST", "/data/un-wpp/life-table/sync", req),
-      syncLifeTables: (req) => this.req("POST", "/data/un-wpp/life-table/sync", req),
-      observations: (f) => this.req("GET", `/life/observations${qs(f)}`),
       summary: () => this.req("GET", "/life/observations/summary"),
       importPreview: (provider, csv) => this.req("POST", "/life/import/preview", { provider, csv }),
       importCommit: (provider, csv) => this.req("POST", "/life/import/commit", { provider, csv }),
